@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Captura de marcadores</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:12px;background:#fafafa;color:#222}
+  h1{font-size:1.2rem} input,select,button{font-size:1rem;padding:8px;margin:3px 0;box-sizing:border-box}
+  input{width:100%} button{border:0;border-radius:6px;background:#2563eb;color:#fff;padding:10px 14px;margin-right:4px}
+  button.sec{background:#6b7280} button.rojo{background:#dc2626} button:disabled{opacity:.4}
+  canvas{width:100%;background:#000;border-radius:6px;touch-action:manipulation}
+  #video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .fila{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .fila label{flex:1;min-width:130px;font-size:.85rem}
+  #estado{margin:8px 0;font-size:.9rem;min-height:1.2em} .oculto{display:none}
+  .medidor{margin:10px 0}
+  .mtitulo{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:2px}
+  .barra{position:relative;height:30px}
+  .pista{position:absolute;left:0;right:0;top:11px;height:8px;border-radius:4px;background:#d1d5db;overflow:hidden}
+  #nivel{height:100%;width:0;background:#22c55e}
+  #umbral{position:absolute;left:0;top:0;width:100%;height:30px;margin:0;padding:0;background:transparent;-webkit-appearance:none;appearance:none}
+  #umbral::-webkit-slider-runnable-track{background:transparent;height:30px}
+  #umbral::-moz-range-track{background:transparent;height:30px}
+  #umbral::-webkit-slider-thumb{-webkit-appearance:none;box-sizing:border-box;width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #bfdbfe;margin-top:4px}
+  #umbral::-moz-range-thumb{box-sizing:border-box;width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #bfdbfe}
+  #micSel{width:100%;font-size:.85rem}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<h1>Captura de marcadores <small style="font-weight:normal;font-size:.7rem;color:#888">v3</small></h1>
+
+<div id="vistaLogin">
+  <input id="email" type="email" placeholder="Email" autocomplete="username">
+  <input id="pwd" type="password" placeholder="Contraseña" autocomplete="current-password">
+  <button onclick="entrar()">Entrar</button>
+</div>
+
+<div id="vistaApp" class="oculto">
+  <div class="fila">
+    <label>Código del deportista<input id="etiqueta" placeholder="p. ej. D01"></label>
+    <label>Nº de marcadores<input id="nmarc" type="number" min="1" max="6" value="3"></label>
+    <label>Diámetro real marcador (mm)<input id="diam" type="number" step="0.1" value="20"></label>
+  </div>
+  <div class="fila">
+    <label>Segundos ANTES del disparo<input id="preS" type="number" min="0" max="5" step="0.1" value="1.5"></label>
+    <label>Segundos DESPUÉS del disparo<input id="postS" type="number" min="0" max="3" step="0.1" value="0.5"></label>
+  </div>
+  <canvas id="vista"></canvas>
+  <video id="video" playsinline muted></video>
+  <div class="medidor">
+    <div class="mtitulo"><span>Volumen del disparo (mueve el círculo)</span><span id="nivelTxt">sin micrófono</span></div>
+    <div class="barra">
+      <div class="pista"><div id="nivel"></div></div>
+      <input id="umbral" type="range" min="0" max="100" step="0.5" value="60" aria-label="Umbral de volumen del disparo">
+    </div>
+    <select id="micSel" class="oculto" aria-label="Micrófono"></select>
+  </div>
+  <div id="estado">Listo. Activa la cámara y toca un marcador en la imagen para calibrar su color.</div>
+  <div>
+    <button id="bCamara" onclick="iniciarCamara()">1. Activar cámara y micrófono</button>
+    <button id="bGrabar" class="rojo" onclick="alternarSesion()" disabled>2. Iniciar sesión</button>
+    <button id="bDisparo" class="sec" onclick="disparoManual()" disabled>Disparo manual (prueba)</button>
+  </div>
+  <p style="font-size:.8rem;color:#555">1) Toca un marcador en la imagen para calibrar su color (se numeran de arriba abajo).
+  2) Haz un disparo (o un ruido parecido) y mueve el círculo azul hasta un nivel por debajo del pico del disparo y por encima del ruido ambiente: la barra se pone roja al superarlo.
+  3) Inicia la sesión: solo se guardan los fotogramas alrededor de cada disparo detectado.
+  El vídeo y el audio no se graban ni se envían: solo se guardan posiciones de los marcadores.</p>
+  <button class="sec" onclick="salir()">Cerrar sesión</button>
+</div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id);
+const MIN_AREA = 8;             // área mínima (px a resolución de trabajo) para aceptar un marcador
+const ANCHO_TRABAJO = 480;      // se procesa a esta anchura para ir fluido en el móvil
+
+let stream = null, corriendo = false, grabando = false;
+let W = 0, H = 0, escala = 1, t0 = 0;
+let rango = null, mask = null, pila = null;
+let muestras = [], disparos = [], perdidos = 0, sinMarc = 0, N = 3;
+let buffer = [], pendiente = null, ultimoDisparo = -1e9, ultimoAviso = 0;
+const REFRACTARIO = 1.0;          // s mínimos entre disparos (evita contar el eco o el propio ruido dos veces)
+let audioCtx = null, analyser = null, bufAudio = null, micStream = null, picoPct = 0;
+const work = document.createElement("canvas"), wctx = work.getContext("2d", { willReadFrequently: true });
+const vista = $("vista"), ctx = vista.getContext("2d"), video = $("video");
+
+try { rango = JSON.parse(localStorage.getItem("rangoColor") || "null"); } catch (e) { rango = null; }
+try { const u = localStorage.getItem("umbralVol"); if (u !== null) $("umbral").value = u; } catch (e) {}
+function estado(t) { $("estado").textContent = t; }
+function numero(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : Math.max(0, v); }
+const umbralPct = () => parseFloat($("umbral").value);
+const pctADb = p => p / 100 * 70 - 70;            // la barra cubre de -70 dB a 0 dB (0 dB = máximo)
+$("umbral").addEventListener("input", () => {
+  try { localStorage.setItem("umbralVol", $("umbral").value); } catch (e) {}
+  pintarMedidor(0);
+});
+
+/* ---------- Sesión ---------- */
+async function entrar() {
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("pwd").value });
+  if (error) { alert("No se pudo iniciar sesión: " + error.message); return; }
+  mostrar(true);
+}
+async function salir() { detener(); await sb.auth.signOut(); mostrar(false); }
+function mostrar(dentro) {
+  $("vistaLogin").classList.toggle("oculto", dentro);
+  $("vistaApp").classList.toggle("oculto", !dentro);
+}
+sb.auth.getSession().then(({ data }) => mostrar(!!data.session));
+
+/* ---------- Cámara y micrófono ---------- */
+async function iniciarCamara() {
+  if (corriendo) return;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+  } catch (e) { estado("No se pudo acceder a la cámara: " + e.message); return; }
+  video.srcObject = stream; await video.play();
+  escala = Math.min(1, ANCHO_TRABAJO / video.videoWidth);
+  W = Math.round(video.videoWidth * escala); H = Math.round(video.videoHeight * escala);
+  work.width = vista.width = W; work.height = vista.height = H;
+  mask = new Uint8Array(W * H); pila = new Int32Array(W * H);
+  corriendo = true;
+  $("bCamara").disabled = true; $("bGrabar").disabled = false; $("bDisparo").disabled = true;
+  const micOk = await iniciarAudio();
+  estado((rango ? "Cámara activa (color calibrado). " : "Cámara activa. Toca un marcador para calibrar su color. ") +
+         (micOk ? "Micrófono activo." : "Sin micrófono: solo podrás usar el disparo manual."));
+  requestAnimationFrame(bucle);
+}
+
+async function iniciarAudio(deviceId) {
+  detenerAudio();
+  try {
+    // Se desactivan los filtros automáticos para que el nivel refleje el sonido real del disparo
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      video: false
+    });
+  } catch (e) { return false; }
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  await audioCtx.resume();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;                       // ~43 ms de audio: cubre el intervalo entre fotogramas
+  audioCtx.createMediaStreamSource(micStream).connect(analyser);   // no se conecta a los altavoces ni se graba
+  bufAudio = new Float32Array(analyser.fftSize);
+  try {
+    const sel = $("micSel"), actual = micStream.getAudioTracks()[0].getSettings().deviceId;
+    const lista = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+    sel.innerHTML = "";
+    lista.forEach((d, i) => {
+      const o = document.createElement("option");
+      o.value = d.deviceId; o.textContent = d.label || ("Micrófono " + (i + 1));
+      if (d.deviceId === actual) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.classList.toggle("oculto", lista.length < 2);
+    sel.onchange = () => iniciarAudio(sel.value);
+  } catch (e) {}
+  return true;
+}
+function detenerAudio() {
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  micStream = null; analyser = null;
+}
+function detener() {
+  corriendo = false; grabando = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; detenerAudio();
+  $("bCamara").disabled = false; $("bGrabar").disabled = true; $("bDisparo").disabled = true;
+  $("bGrabar").textContent = "2. Iniciar sesión";
+}
+
+/* ---------- Volumen ---------- */
+function leerNivel() {                           // pico de la última ventana de audio, 0-100 (de -70 a 0 dB)
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(bufAudio);
+  let pico = 0;
+  for (let i = 0; i < bufAudio.length; i++) { const a = Math.abs(bufAudio[i]); if (a > pico) pico = a; }
+  const db = pico > 0 ? 20 * Math.log10(pico) : -100;
+  return Math.min(100, Math.max(0, (db + 70) / 70 * 100));
+}
+function pintarMedidor(nivel) {
+  picoPct = Math.max(nivel, picoPct - 1.5);      // el pico se mantiene un momento para que se vea el disparo
+  const u = umbralPct();
+  $("nivel").style.width = picoPct + "%";
+  $("nivel").style.background = picoPct >= u ? "#ef4444" : "#22c55e";
+  $("umbral").style.background = "none";
+  $("nivelTxt").textContent = analyser
+    ? `nivel ${Math.round(pctADb(picoPct))} dB · umbral ${Math.round(pctADb(u))} dB`
+    : "sin micrófono · umbral " + Math.round(pctADb(u)) + " dB";
+}
+
+/* ---------- Color ---------- */
+function rgb2hsv(r, g, b) {                 // devuelve h (0-360), s (0-1), v (0-1)
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d > 0) {
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, mx === 0 ? 0 : d / mx, mx / 255];
+}
+
+/* Calibración: tocar un marcador en la imagen */
+vista.addEventListener("click", e => {
+  if (!corriendo) return;
+  const r = vista.getBoundingClientRect();
+  const x = Math.round((e.clientX - r.left) * W / r.width), y = Math.round((e.clientY - r.top) * H / r.height);
+  const px = wctx.getImageData(Math.max(0, x - 2), Math.max(0, y - 2), 5, 5).data;
+  let sr = 0, sg = 0, sb2 = 0, k = 0;
+  for (let i = 0; i < px.length; i += 4) { sr += px[i]; sg += px[i + 1]; sb2 += px[i + 2]; k++; }
+  const [h, s, v] = rgb2hsv(sr / k, sg / k, sb2 / k);
+  rango = { h, tolH: 20, sMin: Math.max(0.2, s - 0.4), vMin: Math.max(0.15, v - 0.45) };
+  try { localStorage.setItem("rangoColor", JSON.stringify(rango)); } catch (e) {}
+  estado("Color calibrado (tono " + Math.round(h) + "°).");
+});
+
+/* ---------- Detección en cada fotograma (JavaScript puro, sin librerías) ---------- */
+function detectar() {
+  const found = [];
+  if (!rango) return found;
+  const img = wctx.getImageData(0, 0, W, H).data, n = W * H;
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    mask[i] = 0;
+    const r = img[p], g = img[p + 1], b = img[p + 2];
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    const d = mx - mn;
+    if (d === 0 || mx / 255 < rango.vMin || d / mx < rango.sMin) continue;
+    let h;
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+    let dh = Math.abs(h - rango.h); if (dh > 180) dh = 360 - dh;
+    if (dh <= rango.tolH) mask[i] = 1;
+  }
+  // componentes conexas (4 vecinos) con pila
+  for (let i = 0; i < n; i++) {
+    if (mask[i] !== 1) continue;
+    let top = 0, area = 0, sx = 0, sy = 0;
+    pila[top++] = i; mask[i] = 2;
+    while (top > 0) {
+      const q = pila[--top], x = q % W, y = (q - x) / W;
+      area++; sx += x; sy += y;
+      if (x > 0 && mask[q - 1] === 1) { mask[q - 1] = 2; pila[top++] = q - 1; }
+      if (x < W - 1 && mask[q + 1] === 1) { mask[q + 1] = 2; pila[top++] = q + 1; }
+      if (y > 0 && mask[q - W] === 1) { mask[q - W] = 2; pila[top++] = q - W; }
+      if (y < H - 1 && mask[q + W] === 1) { mask[q + W] = 2; pila[top++] = q + W; }
+    }
+    if (area >= MIN_AREA) found.push({ x: sx / area + 0.5, y: sy / area + 0.5, a: area });
+  }
+  found.sort((p, q) => q.a - p.a);
+  const top = found.slice(0, N);
+  top.sort((p, q) => p.y - q.y);                         // numeración de arriba abajo
+  top.forEach(f => f.d = Math.sqrt(4 * f.a / Math.PI));  // diámetro equivalente en px
+  return top;
+}
+
+function bucle() {
+  if (!corriendo) return;
+  N = Math.max(1, parseInt($("nmarc").value) || 3);
+  wctx.drawImage(video, 0, 0, W, H);
+  const found = detectar();
+  ctx.drawImage(work, 0, 0);
+  ctx.lineWidth = 2; ctx.font = "16px sans-serif"; ctx.strokeStyle = "#22c55e"; ctx.fillStyle = "#22c55e";
+  found.forEach((f, i) => {
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.d / 2 + 4, 0, 2 * Math.PI); ctx.stroke();
+    ctx.fillText(String(i + 1), f.x + f.d / 2 + 6, f.y);
+  });
+
+  const nivel = leerNivel();
+  pintarMedidor(nivel);
+  const superado = analyser && nivel >= umbralPct();
+
+  if (!grabando) {
+    // Fuera de sesión: solo avisa, para ayudar a ajustar el umbral
+    if (superado && performance.now() - ultimoAviso > 800) {
+      ultimoAviso = performance.now();
+      estado("Umbral superado: un sonido así dispararía una captura.");
+    }
+  } else {
+    const tNow = (performance.now() - t0) / 1000;
+    const pre = numero("preS", 1.5), post = numero("postS", 0.5);
+    let fila = null;
+    if (found.length === N) {
+      fila = [Math.round(tNow * 1000) / 1000];
+      found.forEach(f => fila.push(+(f.x / escala).toFixed(1), +(f.y / escala).toFixed(1), +(f.d / escala).toFixed(1)));
+      buffer.push(fila);                         // memoria temporal de solo coordenadas, nunca imagen
+    } else perdidos++;
+    while (buffer.length && buffer[0][0] < tNow - pre - 0.5) buffer.shift();
+
+    if (pendiente) {
+      if (fila && tNow > pendiente.ts && tNow <= pendiente.fin) pendiente.filas.push(fila);
+      if (tNow >= pendiente.fin) cerrarPendiente();
+    } else if (superado && tNow - ultimoDisparo > REFRACTARIO) {
+      registrarDisparo(tNow, pre, post);
+    }
+    estado(`Sesión en curso · ${disparos.length} disparo(s) capturado(s)` +
+           (sinMarc ? ` · ${sinMarc} sin ver los ${N} marcadores` : ""));
+  }
+  requestAnimationFrame(bucle);
+}
+
+/* ---------- Disparos y sesión ---------- */
+function registrarDisparo(ts, pre, post) {
+  ultimoDisparo = ts;
+  pendiente = { ts, fin: ts + post, filas: buffer.filter(f => f[0] >= ts - pre && f[0] <= ts) };
+  if (post === 0) cerrarPendiente();
+}
+function cerrarPendiente() {
+  if (!pendiente) return;
+  if (pendiente.filas.length === 0) sinMarc++;   // se oyó el disparo pero no se veían todos los marcadores
+  else { disparos.push(pendiente.ts); muestras.push(...pendiente.filas); }
+  pendiente = null;
+}
+function disparoManual() {
+  if (grabando && !pendiente) registrarDisparo((performance.now() - t0) / 1000, numero("preS", 1.5), numero("postS", 0.5));
+}
+function alternarSesion() {
+  if (!grabando) {
+    muestras = []; disparos = []; perdidos = 0; sinMarc = 0; buffer = []; pendiente = null; ultimoDisparo = -1e9;
+    t0 = performance.now(); grabando = true;
+    $("bGrabar").textContent = "Terminar y guardar"; $("bDisparo").disabled = false;
+  } else {
+    cerrarPendiente();
+    grabando = false; $("bGrabar").textContent = "2. Iniciar sesión"; $("bDisparo").disabled = true;
+    guardar();
+  }
+}
+async function guardar() {
+  if (disparos.length === 0) { estado("No se ha capturado ningún disparo; no hay nada que guardar."); return; }
+  const datos = {
+    etiqueta: $("etiqueta").value.trim(), n_marcadores: N,
+    diametro_mm: parseFloat($("diam").value) || null,
+    ancho: video.videoWidth, alto: video.videoHeight,
+    duracion_s: (performance.now() - t0) / 1000,
+    pre_s: numero("preS", 1.5), post_s: numero("postS", 0.5),
+    umbral_db: Math.round(pctADb(umbralPct())),
+    disparos_sin_marcadores: sinMarc, frames_perdidos: perdidos,
+    disparos, muestras      // muestras: [t, x1, y1, d1, x2, y2, d2, ...] solo alrededor de cada disparo
+  };
+  estado("Guardando…");
+  const { error } = await sb.from("sesiones").insert({ datos });
+  estado(error ? "Error al guardar: " + error.message
+               : `Sesión guardada: ${disparos.length} disparo(s), ${muestras.length} fotogramas. No se ha almacenado vídeo ni audio.`);
+}
+</script>
+</body>
+</html>
