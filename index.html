@@ -30,7 +30,7 @@
 <script src="config.js"></script>
 </head>
 <body>
-<h1>Captura de marcadores <small style="font-weight:normal;font-size:.7rem;color:#888">v4</small></h1>
+<h1>Captura de marcadores <small style="font-weight:normal;font-size:.7rem;color:#888">v6</small></h1>
 
 <div id="vistaLogin">
   <input id="email" type="email" placeholder="Email" autocomplete="username">
@@ -43,10 +43,6 @@
     <label>Código del deportista<input id="etiqueta" placeholder="p. ej. D01"></label>
     <label>Nº de marcadores<input id="nmarc" type="number" min="1" max="6" value="3"></label>
     <label>Diámetro real marcador (mm)<input id="diam" type="number" step="0.1" value="20"></label>
-  </div>
-  <div class="fila">
-    <label>Segundos ANTES del disparo<input id="preS" type="number" min="0" max="5" step="0.1" value="1.5"></label>
-    <label>Segundos DESPUÉS del disparo<input id="postS" type="number" min="0" max="3" step="0.1" value="0.5"></label>
   </div>
   <canvas id="vista"></canvas>
   <video id="video" playsinline muted></video>
@@ -66,15 +62,9 @@
   </div>
   <p style="font-size:.8rem;color:#555">1) Toca un marcador en la imagen para calibrar su color (se numeran de arriba abajo).
   2) Haz un disparo (o un ruido parecido) y mueve el círculo azul hasta un nivel por debajo del pico del disparo y por encima del ruido ambiente: la barra se pone roja al superarlo.
-  3) Inicia la sesión: solo se guardan los fotogramas alrededor de cada disparo detectado.
+  3) Inicia la sesión: por cada disparo detectado se guarda UNA sola foto de las posiciones, la del pico de sonido.
   El vídeo y el audio no se graban ni se envían: solo se guardan posiciones de los marcadores.</p>
   <h2 style="font-size:1rem;margin:16px 0 4px">Gráficos en directo</h2>
-  <label style="font-size:.85rem">Unidades
-    <select id="unid" onchange="dibujarGraficos()" style="font-size:.9rem;padding:4px">
-      <option value="px">píxeles</option>
-      <option value="mm">milímetros (según el diámetro real del marcador)</option>
-    </select>
-  </label>
   <canvas id="g1" class="grafico"></canvas>
   <canvas id="g2" class="grafico"></canvas>
   <canvas id="g3" class="grafico"></canvas>
@@ -91,8 +81,8 @@ let stream = null, corriendo = false, grabando = false;
 let W = 0, H = 0, escala = 1, t0 = 0;
 let rango = null, mask = null, pila = null;
 let muestras = [], disparos = [], perdidos = 0, sinMarc = 0, N = 3;
-let tiros = [], ultimoDibujo = 0;     // tiros: [{ts, filas}] para los gráficos
-let buffer = [], pendiente = null, ultimoDisparo = -1e9, ultimoAviso = 0;
+let evento = null, manualPedido = false, picos = [], ultimoDisparo = -1e9, ultimoAviso = 0;
+const EVENTO_MAX = 0.25;          // s máximos para buscar el pico de sonido de un disparo
 const REFRACTARIO = 1.0;          // s mínimos entre disparos (evita contar el eco o el propio ruido dos veces)
 let audioCtx = null, analyser = null, bufAudio = null, micStream = null, picoPct = 0;
 const work = document.createElement("canvas"), wctx = work.getContext("2d", { willReadFrequently: true });
@@ -296,21 +286,24 @@ function bucle() {
     }
   } else {
     const tNow = (performance.now() - t0) / 1000;
-    const pre = numero("preS", 1.5), post = numero("postS", 0.5);
-    let fila = null;
+    let fila = null;                             // posiciones de este fotograma (solo si se ven los N marcadores)
     if (found.length === N) {
       fila = [Math.round(tNow * 1000) / 1000];
       found.forEach(f => fila.push(+(f.x / escala).toFixed(1), +(f.y / escala).toFixed(1), +(f.d / escala).toFixed(1)));
-      buffer.push(fila);                         // memoria temporal de solo coordenadas, nunca imagen
     } else perdidos++;
-    while (buffer.length && buffer[0][0] < tNow - pre - 0.5) buffer.shift();
 
-    if (pendiente) {
-      if (fila && tNow > pendiente.ts && tNow <= pendiente.fin) pendiente.filas.push(fila);
-      if (tNow >= pendiente.fin) cerrarPendiente();
-      else if (performance.now() - ultimoDibujo > 300) { ultimoDibujo = performance.now(); dibujarGraficos(); }
+    if (manualPedido) {                          // disparo manual de prueba: foto inmediata
+      manualPedido = false;
+      if (fila) guardarTiro(fila, null); else sinMarc++;
+    }
+    if (evento) {
+      // Dentro de un disparo: se queda con el fotograma de mayor nivel de sonido
+      if (fila && nivel > evento.nivel) { evento.fila = fila; evento.nivel = nivel; }
+      evento.maxNivel = Math.max(evento.maxNivel, nivel);
+      if (nivel < umbralPct() || tNow - evento.t0 > EVENTO_MAX) cerrarEvento();
     } else if (superado && tNow - ultimoDisparo > REFRACTARIO) {
-      registrarDisparo(tNow, pre, post);
+      ultimoDisparo = tNow;
+      evento = { t0: tNow, fila, nivel: fila ? nivel : -1, maxNivel: nivel };
     }
     estado(`Sesión en curso · ${disparos.length} disparo(s) capturado(s)` +
            (sinMarc ? ` · ${sinMarc} sin ver los ${N} marcadores` : ""));
@@ -319,29 +312,25 @@ function bucle() {
 }
 
 /* ---------- Disparos y sesión ---------- */
-function registrarDisparo(ts, pre, post) {
-  ultimoDisparo = ts;
-  pendiente = { ts, fin: ts + post, filas: buffer.filter(f => f[0] >= ts - pre && f[0] <= ts) };
-  if (post === 0) cerrarPendiente();
-}
-function cerrarPendiente() {
-  if (!pendiente) return;
-  if (pendiente.filas.length === 0) sinMarc++;   // se oyó el disparo pero no se veían todos los marcadores
-  else { disparos.push(pendiente.ts); muestras.push(...pendiente.filas); tiros.push({ ts: pendiente.ts, filas: pendiente.filas }); }
-  pendiente = null;
+function guardarTiro(fila, picoDb) {
+  disparos.push(fila[0]); muestras.push(fila); picos.push(picoDb);
   dibujarGraficos();
 }
-function disparoManual() {
-  if (grabando && !pendiente) registrarDisparo((performance.now() - t0) / 1000, numero("preS", 1.5), numero("postS", 0.5));
+function cerrarEvento() {
+  if (!evento) return;
+  if (evento.fila) guardarTiro(evento.fila, Math.round(pctADb(evento.maxNivel) * 10) / 10);
+  else sinMarc++;                                // se oyó el disparo pero no se veían todos los marcadores
+  evento = null;
 }
+function disparoManual() { if (grabando) manualPedido = true; }
 function alternarSesion() {
   if (!grabando) {
-    muestras = []; disparos = []; tiros = []; perdidos = 0; sinMarc = 0; buffer = []; pendiente = null; ultimoDisparo = -1e9;
-    dibujarGraficos();
+    muestras = []; disparos = []; picos = []; perdidos = 0; sinMarc = 0; evento = null; manualPedido = false; ultimoDisparo = -1e9;
     t0 = performance.now(); grabando = true;
     $("bGrabar").textContent = "Terminar y guardar"; $("bDisparo").disabled = false;
+    dibujarGraficos();
   } else {
-    cerrarPendiente();
+    cerrarEvento();
     grabando = false; $("bGrabar").textContent = "2. Iniciar sesión"; $("bDisparo").disabled = true;
     guardar();
   }
@@ -353,16 +342,17 @@ async function guardar() {
     diametro_mm: parseFloat($("diam").value) || null,
     ancho: video.videoWidth, alto: video.videoHeight,
     duracion_s: (performance.now() - t0) / 1000,
-    pre_s: numero("preS", 1.5), post_s: numero("postS", 0.5),
     umbral_db: Math.round(pctADb(umbralPct())),
     disparos_sin_marcadores: sinMarc, frames_perdidos: perdidos,
-    disparos, muestras      // muestras: [t, x1, y1, d1, x2, y2, d2, ...] solo alrededor de cada disparo
+    disparos, picos_db: picos,
+    muestras      // una fila por disparo: [t, x1, y1, d1, x2, y2, d2, ...]
   };
   estado("Guardando…");
   const { error } = await sb.from("sesiones").insert({ datos });
   estado(error ? "Error al guardar: " + error.message
-               : `Sesión guardada: ${disparos.length} disparo(s), ${muestras.length} fotogramas. No se ha almacenado vídeo ni audio.`);
+               : `Sesión guardada: ${disparos.length} disparo(s), una foto por disparo. No se ha almacenado vídeo ni audio.`);
 }
+
 /* ---------- Gráficos en directo ---------- */
 const COLORES = ["#ef4444", "#2563eb", "#16a34a", "#f59e0b", "#9333ea", "#0891b2"];
 
@@ -401,11 +391,20 @@ function grafico(cv, grupos, o) {
     g.strokeStyle = "#111"; g.setLineDash([4, 3]);
     g.beginPath(); g.moveTo(px(0), T); g.lineTo(px(0), h - B); g.stroke(); g.setLineDash([]);
   }
+  if (o.ceroY && ymin < 0 && ymax > 0) {                // línea horizontal en la media (0)
+    g.strokeStyle = "#111"; g.lineWidth = 1; g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(L, py(0)); g.lineTo(w - R, py(0)); g.stroke(); g.setLineDash([]);
+  }
   grupos.forEach(gr => {
     g.strokeStyle = gr.color; g.fillStyle = gr.color; g.lineWidth = 1.5;
     gr.trazos.forEach(tr => {
-      if (o.puntos) tr.forEach(p => { g.beginPath(); g.arc(px(p[0]), py(p[1]), 2.5, 0, 6.2832); g.fill(); });
-      else { g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke(); }
+      if (o.lineas) { g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke(); }
+      if (o.puntos) tr.forEach(p => { g.beginPath(); g.arc(px(p[0]), py(p[1]), 3, 0, 6.2832); g.fill(); });
+      if (o.numeros && tr.length <= 30) {               // número de orden de cada disparo
+        g.font = "9px sans-serif"; g.fillStyle = "#111";
+        tr.forEach((p, j) => g.fillText(String(j + 1), px(p[0]) + 4, py(p[1]) - 4));
+        g.font = "11px sans-serif"; g.fillStyle = gr.color;
+      }
     });
   });
   grupos.forEach((gr, i) => {                            // leyenda
@@ -415,38 +414,33 @@ function grafico(cv, grupos, o) {
   });
 }
 
+const media = a => a.reduce((p, q) => p + q, 0) / a.length;
+
 function dibujarGraficos() {
-  const lista = tiros.slice();
-  if (pendiente && pendiente.filas.length) lista.push({ ts: pendiente.ts, filas: pendiente.filas });
   const diam = parseFloat($("diam").value);
-  const mm = $("unid").value === "mm" && diam > 0;
+  const mm = diam > 0;                                   // sin diámetro real no se puede pasar a distancias
   const u = mm ? "mm" : "px";
   const nm = Math.min(Math.max(1, parseInt($("nmarc").value) || 3), COLORES.length);
   const gP = [], gX = [], gY = [];
   for (let i = 0; i < nm; i++) {
-    const ds = [];
-    lista.forEach(t => t.filas.forEach(f => { if (f.length > 3 + 3 * i) ds.push(f[3 + 3 * i]); }));
-    const k = mm && ds.length ? diam / mediana(ds) : 1;  // mm por píxel, con el diámetro del marcador como referencia
-    const pts = [], trX = [], trY = [];
-    lista.forEach(t => {
-      const tx = [], ty = [];
-      t.filas.forEach(f => {
-        if (f.length <= 3 + 3 * i) return;
-        const x = f[1 + 3 * i] * k, y = f[2 + 3 * i] * k;
-        pts.push([x, y]); tx.push([f[0] - t.ts, x]); ty.push([f[0] - t.ts, y]);
-      });
-      trX.push(tx); trY.push(ty);
-    });
-    gP.push({ color: COLORES[i], trazos: [pts] });
-    gX.push({ color: COLORES[i], trazos: trX });
-    gY.push({ color: COLORES[i], trazos: trY });
+    const fs = muestras.filter(f => f.length > 3 + 3 * i);
+    // mm por píxel de este marcador: diámetro real / diámetro en píxeles medido en las fotos (mediana de la sesión)
+    const k = mm && fs.length ? diam / mediana(fs.map(f => f[3 + 3 * i])) : 1;
+    const pos = fs.map(f => ({ t: f[0], x: f[1 + 3 * i] * k, y: f[2 + 3 * i] * k }));
+    const mx = pos.length ? media(pos.map(p => p.x)) : 0, my = pos.length ? media(pos.map(p => p.y)) : 0;
+    gP.push({ color: COLORES[i], trazos: [pos.map(p => [p.x, p.y])] });          // posición absoluta, en orden cronológico
+    gX.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, p.x - mx])] });     // distancia a la media en X
+    gY.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, my - p.y])] });     // distancia a la media en Y (+ = arriba)
   }
-  const n = lista.length;
-  grafico($("g1"), gP, { titulo: `1) Posición de cada marcador en ${n} disparo(s)`, xl: `X (${u})`, puntos: true, invertY: true });
-  grafico($("g2"), gX, { titulo: `2) X (${u}) respecto al tiempo`, xl: "Tiempo respecto al disparo (s)", cero: true });
-  grafico($("g3"), gY, { titulo: `3) Y (${u}) respecto al tiempo`, xl: "Tiempo respecto al disparo (s)", cero: true, invertY: true });
+  const n = muestras.length;
+  const aviso = mm ? "" : " · escribe el diámetro real para ver mm";
+  grafico($("g1"), gP, { titulo: `1) Posición de cada marcador, ${n} disparo(s) en orden cronológico${aviso}`, xl: `X (${u})`, lineas: true, puntos: true, numeros: true, invertY: true });
+  grafico($("g2"), gX, { titulo: `2) Desplazamiento en X respecto a la media (${u}, 0 = media)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true });
+  grafico($("g3"), gY, { titulo: `3) Desplazamiento en Y respecto a la media (${u}, 0 = media, + = arriba)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true });
 }
 window.addEventListener("resize", dibujarGraficos);
+$("diam").addEventListener("input", dibujarGraficos);
+$("nmarc").addEventListener("input", dibujarGraficos);
 
 </script>
 </body>
