@@ -47,6 +47,22 @@ t = M[:, 0]
 picos = d.get("picos_db", [])
 n_tiros = len(M)
 
+PLANOS = {"sagital": "Sagital (hombro-cadera-rodilla)", "frontal_cara": "Frontal de cara", "frontal_espalda": "Frontal de espaldas"}
+ficha = [d.get("deportista") or d.get("etiqueta"), d.get("modalidad"),
+         f"{d['distancia_m']:g} m" if d.get("distancia_m") else None, d.get("mano"), PLANOS.get(d.get("plano"))]
+ficha = [str(x) for x in ficha if x]
+if ficha:
+    st.markdown("**" + " · ".join(ficha) + "**")
+if d.get("comentarios"):
+    st.info(d["comentarios"])
+_nombres = d.get("nombres_marcadores") or []
+
+
+def nom(m):
+    """Nombre del marcador m (1, 2, 3…): el que puso el usuario (p. ej. «Hombro») o «M1»."""
+    return _nombres[m - 1] if m - 1 < len(_nombres) and _nombres[m - 1] else f"M{m}"
+
+
 c1, c2 = st.columns(2)
 diam_mm = c1.number_input("Diámetro real del marcador (mm)", value=float(d.get("diametro_mm") or 20.0))
 c2.metric("Disparos (una foto por disparo)", n_tiros)
@@ -68,8 +84,8 @@ tabla = pd.DataFrame({"Disparo": np.arange(1, n_tiros + 1), "t (s)": np.round(t,
 if len(picos) == n_tiros:
     tabla["Pico (dB)"] = picos
 for m, s in series.items():
-    tabla[f"M{m} X (mm)"] = np.round(s["ap"], 2)
-    tabla[f"M{m} Y (mm)"] = np.round(s["vert"], 2)
+    tabla[f"{nom(m)} X (mm)"] = np.round(s["ap"], 2)
+    tabla[f"{nom(m)} Y (mm)"] = np.round(s["vert"], 2)
 
 st.subheader("Coordenadas por disparo")
 st.dataframe(tabla, use_container_width=True)
@@ -82,7 +98,7 @@ if n_tiros >= 3:
         for eje, nom in (("vert", "Vertical"), ("ap", "Anteroposterior")):
             v = s[eje]
             res.append({
-                "Marcador": m, "Eje": nom,
+                "Marcador": nom(m), "Eje": nom,
                 "Media (mm)": round(float(v.mean()), 2),
                 "Desv. típica (mm)": round(float(np.std(v, ddof=1)), 2),
                 "Rango (mm)": round(float(v.max() - v.min()), 2),
@@ -109,11 +125,11 @@ for k in range(n_tiros):
     ax[0].plot(xs, ys, color="#374151", linewidth=2.2 if ultimo else 1.0,
                alpha=1.0 if n_tiros == 1 else min(1.0, 0.2 + 0.8 * k / (n_tiros - 1)), zorder=1)
 for m, s in series.items():
-    ax[0].plot(s["ap"], -s["vert"], marker="o", linewidth=1, alpha=0.5, label=f"Marcador {m}")   # trayectoria en orden cronológico
+    ax[0].plot(s["ap"], -s["vert"], marker="o", linewidth=1, alpha=0.5, label=nom(m))   # trayectoria en orden cronológico
     for k in range(n_tiros):
         ax[0].annotate(str(k + 1), (s["ap"][k], -s["vert"][k]), textcoords="offset points", xytext=(3, 3), fontsize=7)
-    ax[1].plot(t, s["ap"] - s["ap"].mean(), marker="o", label=f"Marcador {m}")      # distancia a la media
-    ax[2].plot(t, s["vert"] - s["vert"].mean(), marker="o", label=f"Marcador {m}")  # + = arriba
+    ax[1].plot(t, s["ap"] - s["ap"].mean(), marker="o", label=nom(m))      # distancia a la media
+    ax[2].plot(t, s["vert"] - s["vert"].mean(), marker="o", label=nom(m))  # + = arriba
 ax[0].set_title("Marcadores sobre la imagen")
 ax[0].set_xlabel("X (mm)")
 ax[0].set_ylabel("Y (mm, desde arriba)")
