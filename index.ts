@@ -1,8 +1,12 @@
-// Función de Supabase «comentario-ia»: recibe los datos numéricos de una sesión y devuelve la valoración de Claude.
-// La clave de Anthropic vive solo aquí, como secreto (ANTHROPIC_API_KEY): nunca llega a la página web.
-// Supabase comprueba por defecto que quien llama ha iniciado sesión (verify_jwt activado).
+// Función de Supabase «comentario-ia»: recibe los datos numéricos de una sesión y devuelve una valoración hecha por una IA.
+// Funciona con DOS proveedores; usa el primero cuya clave encuentre entre los secretos de Supabase:
+//   - GEMINI_API_KEY     → Google Gemini (gratis, sin tarjeta: https://aistudio.google.com/apikey)
+//   - ANTHROPIC_API_KEY  → Claude (de pago por uso: https://console.anthropic.com)
+// Las claves viven solo aquí, como secretos: nunca llegan a la página web.
+// Opcional: el secreto IA_MODELO cambia el modelo sin tocar el código (por defecto, abajo).
 
-const MODELO = "claude-sonnet-5-5";   // cámbialo aquí si quieres otro modelo
+const MODELO_GEMINI = "gemini-2.5-flash";
+const MODELO_CLAUDE = "claude-sonnet-5-5";
 const MAX_BYTES = 60_000;             // tope del tamaño de los datos recibidos
 
 const CORS = {
@@ -36,27 +40,41 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(cuerpo), { status, headers: { ...CORS, "Content-Type": "application/json" } });
   try {
     if (req.method !== "POST") return responder({ error: "Método no permitido" }, 405);
-    const clave = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!clave) return responder({ error: "Falta el secreto ANTHROPIC_API_KEY en Supabase" }, 500);
+    const claveGemini = Deno.env.get("GEMINI_API_KEY"), claveClaude = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!claveGemini && !claveClaude) return responder({ error: "Falta un secreto en Supabase: GEMINI_API_KEY (gratis) o ANTHROPIC_API_KEY" }, 500);
 
     const crudo = await req.text();
     if (crudo.length > MAX_BYTES) return responder({ error: "Datos demasiado grandes" }, 413);
-    const datos = JSON.parse(crudo);
+    const usuario = "Datos de la sesión (JSON):\n" + JSON.stringify(JSON.parse(crudo));
+    const modelo = Deno.env.get("IA_MODELO");
+    let texto = "";
 
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": clave, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: MODELO,
-        max_tokens: 600,
-        system: SISTEMA,
-        messages: [{ role: "user", content: "Datos de la sesión (JSON):\n" + JSON.stringify(datos) }],
-      }),
-    });
-    const j = await r.json();
-    if (!r.ok) return responder({ error: "Error de la API de Claude: " + (j?.error?.message ?? r.status) }, 502);
-    const texto = (j.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("\n").trim();
-    if (!texto) return responder({ error: "Respuesta vacía" }, 502);
+    if (claveGemini) {
+      const m = modelo || MODELO_GEMINI;
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": claveGemini, "content-type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: SISTEMA }] },
+          contents: [{ role: "user", parts: [{ text: usuario }] }],
+          generationConfig: { maxOutputTokens: 2000, temperature: 0.4 },
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) return responder({ error: `Gemini (${m}): ` + (j?.error?.message ?? r.status) }, 502);
+      texto = (j.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? "").join("\n").trim();
+    } else {
+      const m = modelo || MODELO_CLAUDE;
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": claveClaude!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: m, max_tokens: 600, system: SISTEMA, messages: [{ role: "user", content: usuario }] }),
+      });
+      const j = await r.json();
+      if (!r.ok) return responder({ error: `Claude (${m}): ` + (j?.error?.message ?? r.status) }, 502);
+      texto = (j.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("\n").trim();
+    }
+    if (!texto) return responder({ error: "La IA devolvió una respuesta vacía" }, 502);
     return responder({ texto });
   } catch (e) {
     return responder({ error: String(e) }, 500);

@@ -100,7 +100,9 @@
   textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 20%,transparent)}
   #informe label.campo2{display:block;font-size:.85rem;font-weight:500;color:var(--muted);margin:12px 2px 2px}
   .nomfila{display:flex;align-items:center;gap:10px}
-  .nomfila input{margin:3px 0}
+  .nomfila input,.nomfila select{margin:3px 0}
+  .nomfila select{flex:1;min-width:0}
+  .nomfila input{flex:1;min-width:0}
   .punto{width:14px;height:14px;border-radius:50%;flex:none}
   #informe .ia{display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;padding:12px 14px;border-radius:16px;background:var(--soft);font-size:.9rem;cursor:pointer}
   #informe .ia input{margin:3px 0 0}
@@ -249,7 +251,6 @@
     <h2 style="margin-top:0">Informe de la sesión</h2>
     <p class="nota" style="margin:0 0 8px">Opcional: indica a qué parte del cuerpo corresponde cada marcador (se verá en los gráficos) y añade comentarios. Después puedes descargar el informe.</p>
     <div id="nombresMarc"></div>
-    <datalist id="listaPartes"></datalist>
     <label class="campo2" for="comentarios">Comentarios sobre la sesión (opcional)</label>
     <textarea id="comentarios" rows="3" maxlength="1500" placeholder="Cómo fue la sesión, sensaciones, material, condiciones…"></textarea>
     <label class="ia"><input type="checkbox" id="conIA"><span>Incluir valoración de la IA (Claude)
@@ -1314,19 +1315,27 @@ try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", dibu
 $("diam").addEventListener("input", dibujarGraficos);
 $("nmarc").addEventListener("input", dibujarGraficos);
 /* ---------- Nombres de marcadores, comentarios e informe ---------- */
-const PARTES = ["Hombro", "Codo", "Muñeca", "Cabeza", "Cuello", "Cadera", "Rodilla", "Tobillo", "Pie", "Espalda", "Fusil", "Pistola"];
-$("listaPartes").innerHTML = PARTES.map(p => `<option value="${p}">`).join("");
+const PARTES = ["Hombro", "Codo", "Muñeca", "Cabeza", "Cuello", "Cadera", "Rodilla", "Tobillo", "Pie", "Espalda", "Carabina", "Pistola"];
 const nombreMarc = i => String(nombresM[i] || "").trim() || ("M" + (i + 1));
 const nMarcActual = () => Math.min(Math.max(1, parseInt($("nmarc").value) || 3), COLORES.length);
 function construirNombres() {
   const n = nMarcActual(), cont = $("nombresMarc");
   if (cont.dataset.n !== String(n)) {
     cont.dataset.n = n;
+    const opciones = '<option value="">M? sin nombre</option>' + PARTES.map(p => `<option value="${p}">${p}</option>`).join("") + '<option value="__otro__">Otro…</option>';
     cont.innerHTML = Array.from({ length: n }, (_, i) =>
       `<div class="nomfila"><span class="punto" style="background:${COLORES[i]}"></span>` +
-      `<input type="text" list="listaPartes" data-nm="${i}" maxlength="30" placeholder="M${i + 1}: ¿qué parte del cuerpo es?" autocomplete="off" aria-label="Nombre del marcador ${i + 1}"></div>`).join("");
+      `<select data-sel="${i}" aria-label="Parte del cuerpo del marcador ${i + 1}">${opciones.replace("M? ", "M" + (i + 1) + ": ")}</select>` +
+      `<input type="text" class="oculto" data-nm="${i}" maxlength="30" placeholder="¿Cuál?" autocomplete="off" aria-label="Nombre del marcador ${i + 1}"></div>`).join("");
   }
-  cont.querySelectorAll("input").forEach(inp => { if (document.activeElement !== inp) inp.value = nombresM[+inp.dataset.nm] || ""; });
+  cont.querySelectorAll("select").forEach(sel => {
+    const i = +sel.dataset.sel, v = String(nombresM[i] || ""), txt = cont.querySelector(`input[data-nm="${i}"]`);
+    if (document.activeElement === sel || document.activeElement === txt) return;       // no se pisa lo que se está escribiendo
+    const conocida = PARTES.includes(v);
+    sel.value = !v ? "" : conocida ? v : "__otro__";
+    txt.classList.toggle("oculto", sel.value !== "__otro__");
+    if (sel.value === "__otro__") txt.value = v === "__otro__" ? "" : v;
+  });
   if (document.activeElement !== $("comentarios")) $("comentarios").value = comentarios;
   $("bInforme").disabled = !muestras.length;
 }
@@ -1336,7 +1345,15 @@ function metaCambiada(redibujar) {
   if (modo === "cam") publicar();
   else { clearTimeout(metaTimer); metaTimer = setTimeout(enviarMeta, 800); }
 }
-$("nombresMarc").addEventListener("input", e => {
+$("nombresMarc").addEventListener("change", e => {                // desplegable: parte del cuerpo o «Otro…»
+  if (e.target.dataset.sel === undefined) return;
+  const i = +e.target.dataset.sel, txt = $("nombresMarc").querySelector(`input[data-nm="${i}"]`), otro = e.target.value === "__otro__";
+  txt.classList.toggle("oculto", !otro);
+  nombresM[i] = otro ? txt.value : e.target.value;
+  if (otro) txt.focus();
+  metaCambiada(true);
+});
+$("nombresMarc").addEventListener("input", e => {                 // texto libre cuando se elige «Otro…»
   if (e.target.dataset.nm === undefined) return;
   nombresM[+e.target.dataset.nm] = e.target.value; metaCambiada(true);
 });
@@ -1432,8 +1449,11 @@ function payloadIA(S) {
 async function pedirIA(S) {
   const { data, error } = await sb.functions.invoke("comentario-ia", { body: payloadIA(S) });
   if (error) {
-    const st = error.context && error.context.status;
-    throw new Error(st === 404 ? "la función de IA aún no está creada en Supabase" : st === 401 ? "sesión caducada: vuelve a entrar" : (error.message || "error de conexión"));
+    const resp = error.context, st = resp && resp.status;
+    let detalle = "";
+    try { const j = await resp.json(); detalle = j && (j.error || j.message) || ""; } catch (e) {}   // la función explica qué falla
+    throw new Error(st === 404 ? "la función «comentario-ia» no existe en Supabase" : st === 401 ? "sesión caducada: vuelve a entrar" :
+                    detalle || error.message || "error de conexión");
   }
   if (!data || !data.texto) throw new Error((data && data.error) || "respuesta vacía");
   return String(data.texto).trim().slice(0, 1700);
