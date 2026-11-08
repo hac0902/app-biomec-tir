@@ -55,9 +55,12 @@ st.caption(f"Umbral de volumen: {d.get('umbral_db', '—')} dB · disparos oído
 
 # ---------- Conversión a mm con el diámetro del marcador como referencia ----------
 series = {}
+ks = []   # mm por píxel (una sola escala para toda la sesión)
+# Una única escala, igual en X, en Y y para todos los marcadores: diámetro real / mediana de todos los diámetros medidos
+mm_px = diam_mm / np.median(np.concatenate([M[:, 3 + 3 * i] for i in range(n)]))
 for i in range(n):
     x, y, dd = M[:, 1 + 3 * i], M[:, 2 + 3 * i], M[:, 3 + 3 * i]
-    mm_px = diam_mm / np.median(dd)
+    ks.append(mm_px)
     series[i + 1] = {"ap": x * mm_px, "vert": -y * mm_px}   # vertical positivo hacia arriba
 
 # ---------- Tabla con las coordenadas de cada disparo ----------
@@ -92,15 +95,28 @@ else:
 
 # ---------- Gráficos ----------
 fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+# Gráfico 1: los ejes son las medidas de la cámara (en mm) y se ve la figura que dibujan los marcadores en cada disparo
+ancho_px, alto_px = d.get("ancho"), d.get("alto")
+if ancho_px and alto_px:
+    aw, ah = ancho_px * float(np.mean(ks)), alto_px * float(np.mean(ks))
+    ax[0].set_xlim(0, aw)
+    ax[0].set_ylim(ah, 0)                     # orientación de la imagen: el origen está arriba a la izquierda
+    ax[0].set_aspect("equal", adjustable="box")
+for k in range(n_tiros):
+    xs = [series[m]["ap"][k] for m in series]
+    ys = [-series[m]["vert"][k] for m in series]   # -vert = Y de la imagen (crece hacia abajo)
+    ultimo = k == n_tiros - 1
+    ax[0].plot(xs, ys, color="#374151", linewidth=2.2 if ultimo else 1.0,
+               alpha=1.0 if n_tiros == 1 else min(1.0, 0.2 + 0.8 * k / (n_tiros - 1)), zorder=1)
 for m, s in series.items():
-    ax[0].plot(s["ap"], s["vert"], marker="o", label=f"Marcador {m}")          # unidos en orden cronológico
+    ax[0].plot(s["ap"], -s["vert"], marker="o", linewidth=1, alpha=0.5, label=f"Marcador {m}")   # trayectoria en orden cronológico
     for k in range(n_tiros):
-        ax[0].annotate(str(k + 1), (s["ap"][k], s["vert"][k]), textcoords="offset points", xytext=(3, 3), fontsize=7)
+        ax[0].annotate(str(k + 1), (s["ap"][k], -s["vert"][k]), textcoords="offset points", xytext=(3, 3), fontsize=7)
     ax[1].plot(t, s["ap"] - s["ap"].mean(), marker="o", label=f"Marcador {m}")      # distancia a la media
     ax[2].plot(t, s["vert"] - s["vert"].mean(), marker="o", label=f"Marcador {m}")  # + = arriba
-ax[0].set_title("Posición en cada disparo (orden cronológico)")
+ax[0].set_title("Marcadores sobre la imagen")
 ax[0].set_xlabel("X (mm)")
-ax[0].set_ylabel("Y (mm, + = arriba)")
+ax[0].set_ylabel("Y (mm, desde arriba)")
 ax[1].set_title("Desplazamiento en X respecto a la media")
 ax[2].set_title("Desplazamiento en Y respecto a la media")
 for a in ax[1:]:

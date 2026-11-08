@@ -14,6 +14,11 @@
   .fila{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .fila label{flex:1;min-width:130px;font-size:.85rem}
   #estado{margin:8px 0;font-size:.9rem;min-height:1.2em} .oculto{display:none}
   .medidor{margin:10px 0}
+  .colorbox{margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:6px;background:#fff}
+  .sw{width:34px;height:34px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #888;margin:2px 4px 2px 0;padding:0}
+  .sw.sel{box-shadow:0 0 0 3px #2563eb}
+  .colorbox input[type=color]{width:60px;height:36px;padding:0}
+  .colorbox input[type=checkbox]{width:auto;margin-right:6px}
   .mtitulo{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:2px}
   .barra{position:relative;height:30px}
   .pista{position:absolute;left:0;right:0;top:11px;height:8px;border-radius:4px;background:#d1d5db;overflow:hidden}
@@ -24,29 +29,63 @@
   #umbral::-webkit-slider-thumb{-webkit-appearance:none;box-sizing:border-box;width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #bfdbfe;margin-top:4px}
   #umbral::-moz-range-thumb{box-sizing:border-box;width:22px;height:22px;border-radius:50%;background:#2563eb;border:3px solid #bfdbfe}
   #micSel{width:100%;font-size:.85rem}
-  canvas.grafico{background:#fff;border:1px solid #ddd;height:230px;margin-top:8px;display:block}
+  canvas.grafico{background:#fff;border:1px solid #ddd;height:230px;margin-top:8px;display:block;touch-action:pan-y}
+  .zbar button{padding:3px 10px;font-size:.8rem;margin:4px 4px 0 0}
+  #listaDisparos{max-height:190px;overflow:auto;border:1px solid #ddd;border-radius:6px;background:#fff}
+  .tiro{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #eee;font-size:.85rem}
+  .tiro label{flex:1;display:flex;align-items:center;gap:8px;margin:0}
+  .tiro input{width:auto;margin:0}
+  .tiro button{padding:2px 9px;background:#dc2626;font-size:.8rem;margin:0}
+  .mini{padding:4px 10px;font-size:.8rem}
+  body.modo-dash .solo-cam{display:none !important}
+  body:not(.modo-dash) .solo-dash{display:none !important}
+  .modos{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0;font-size:.9rem}
+  .modos label{display:flex;align-items:center;gap:6px}
+  .modos input{width:auto;margin:0}
+  #liveCam{font-size:.8rem;color:#555;margin:2px 0 6px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 </head>
 <body>
-<h1>Captura de marcadores <small style="font-weight:normal;font-size:.7rem;color:#888">v6</small></h1>
+<h1><span id="titulo">Captura de marcadores</span> <small style="font-weight:normal;font-size:.7rem;color:#888">v12</small></h1>
 
 <div id="vistaLogin">
   <input id="email" type="email" placeholder="Email" autocomplete="username">
   <input id="pwd" type="password" placeholder="Contraseña" autocomplete="current-password">
+  <div class="modos">
+    <label><input type="radio" name="modo" id="modoCam" value="cam" checked> Este dispositivo es la cámara (app completa)</label>
+    <label><input type="radio" name="modo" id="modoDash" value="dash"> Solo dashboard (ver los gráficos en directo)</label>
+  </div>
   <button onclick="entrar()">Entrar</button>
 </div>
 
 <div id="vistaApp" class="oculto">
-  <div class="fila">
+  <div class="solo-dash colorbox">
+    <div class="mtitulo"><span>Sesión en directo</span><span id="dConn">…</span></div>
+    <select id="dSesiones" style="width:100%;font-size:.95rem;padding:6px"></select>
+    <div id="dEstado" style="font-size:.9rem;margin-top:6px">Buscando cámaras conectadas…</div>
+    <div id="dInfo" style="font-size:.8rem;color:#666"></div>
+  </div>
+  <div class="fila solo-cam">
     <label>Código del deportista<input id="etiqueta" placeholder="p. ej. D01"></label>
     <label>Nº de marcadores<input id="nmarc" type="number" min="1" max="6" value="3"></label>
     <label>Diámetro real marcador (mm)<input id="diam" type="number" step="0.1" value="20"></label>
   </div>
-  <canvas id="vista"></canvas>
+  <canvas id="vista" class="solo-cam"></canvas>
   <video id="video" playsinline muted></video>
-  <div class="medidor">
+  <div class="colorbox solo-cam">
+    <div class="mtitulo"><span>Color de los marcadores</span><span id="colorTxt">sin elegir</span></div>
+    <div id="colorHint" style="font-size:.8rem;color:#888"></div>
+    <div id="swatches"></div>
+    <div class="fila">
+      <label>Otro color<input id="colorPick" type="color" value="#ff0000"></label>
+      <label>Tolerancia de tono<input id="tolH" type="range" min="5" max="45" value="20"></label>
+    </div>
+    <button id="bMuestra" class="sec" onclick="muestrear()" disabled>Tomar el color de la imagen</button>
+    <label style="font-size:.85rem;display:block;margin-top:6px"><input type="checkbox" id="verMask">Ver máscara de color (blanco = color elegido)</label>
+  </div>
+  <div class="medidor solo-cam">
     <div class="mtitulo"><span>Volumen del disparo (mueve el círculo)</span><span id="nivelTxt">sin micrófono</span></div>
     <div class="barra">
       <div class="pista"><div id="nivel"></div></div>
@@ -54,17 +93,31 @@
     </div>
     <select id="micSel" class="oculto" aria-label="Micrófono"></select>
   </div>
-  <div id="estado">Listo. Activa la cámara y toca un marcador en la imagen para calibrar su color.</div>
-  <div>
+  <div id="estado" class="solo-cam">Listo. Activa la cámara, elige el color de los marcadores y toca cada marcador en la imagen.</div>
+  <div id="liveCam" class="solo-cam"></div>
+  <div class="solo-cam">
     <button id="bCamara" onclick="iniciarCamara()">1. Activar cámara y micrófono</button>
+    <button id="bRecal" class="sec" onclick="calibrar()" disabled>Calibrar</button>
     <button id="bGrabar" class="rojo" onclick="alternarSesion()" disabled>2. Iniciar sesión</button>
+    <button id="bGuardar" onclick="guardarSesion()" disabled>3. Guardar sesión</button>
     <button id="bDisparo" class="sec" onclick="disparoManual()" disabled>Disparo manual (prueba)</button>
   </div>
-  <p style="font-size:.8rem;color:#555">1) Toca un marcador en la imagen para calibrar su color (se numeran de arriba abajo).
+  <p class="solo-cam" style="font-size:.8rem;color:#555">0) Elige el color de los marcadores (o pulsa «Tomar el color de la imagen» y toca uno): solo se buscarán círculos de ese color. Color y marcadores solo se pueden cambiar con la calibración abierta.
+  1) Toca los marcadores en la imagen, uno por uno y en el orden que quieras numerarlos: cada uno se busca solo cerca del punto que tocas (círculo discontinuo) y su diámetro no puede superar 1/10 del ancho de la imagen. Si la persona se mueve, pulsa «Calibrar» y vuelve a tocarlos (con la calibración abierta también puedes cambiar el color).
   2) Haz un disparo (o un ruido parecido) y mueve el círculo azul hasta un nivel por debajo del pico del disparo y por encima del ruido ambiente: la barra se pone roja al superarlo.
   3) Inicia la sesión: por cada disparo detectado se guarda UNA sola foto de las posiciones, la del pico de sonido.
   El vídeo y el audio no se graban ni se envían: solo se guardan posiciones de los marcadores.</p>
+  <h2 style="font-size:1rem;margin:16px 0 4px">Disparos <span id="nDisp" style="font-weight:normal;font-size:.85rem;color:#666"></span></h2>
+  <div style="margin-bottom:4px">
+    <button class="sec mini" onclick="verTodos(true)">Marcar todos</button>
+    <button class="sec mini" onclick="verTodos(false)">Quitar todas las marcas</button>
+  </div>
+  <div id="listaDisparos"></div>
+  <p class="solo-cam" style="font-size:.8rem;color:#555;margin:4px 0">Marca los disparos que quieres ver en los gráficos. «Eliminar» quita el disparo de la sesión (antes de guardarla).</p>
+  <p class="solo-dash" style="font-size:.8rem;color:#555;margin:4px 0">Solo lectura: las casillas cambian lo que ves aquí, no en la cámara. Para eliminar un disparo, hazlo en el dispositivo de la cámara.</p>
   <h2 style="font-size:1rem;margin:16px 0 4px">Gráficos en directo</h2>
+  <p style="font-size:.8rem;color:#555;margin:0">Zoom: rueda del ratón o pellizco · mover: arrastrar (con zoom) · doble clic o «Restablecer zoom» para volver.</p>
+  <label style="font-size:.85rem;display:block"><input type="checkbox" id="verFig" checked style="width:auto;margin-right:6px">Unir los marcadores de cada disparo (dibujo de la figura)</label>
   <canvas id="g1" class="grafico"></canvas>
   <canvas id="g2" class="grafico"></canvas>
   <canvas id="g3" class="grafico"></canvas>
@@ -81,6 +134,17 @@ let stream = null, corriendo = false, grabando = false;
 let W = 0, H = 0, escala = 1, t0 = 0;
 let rango = null, mask = null, pila = null;
 let muestras = [], disparos = [], perdidos = 0, sinMarc = 0, N = 3;
+let marcas = [];               // marcadores elegidos a mano: {x, y} (px de trabajo)
+let ids = [], vis = [], contadorId = 0, eliminados = 0;   // lista de disparos: número fijo, visible en gráficos
+let porGuardar = false, guardada = false, duracion = 0;
+let modo = "cam";               // "cam": app completa con cámara · "dash": solo dashboard en directo
+try { if (localStorage.getItem("modoDisp") === "dash") modo = "dash"; } catch (e) {}
+$(modo === "dash" ? "modoDash" : "modoCam").checked = true;
+let contadorSesion = 0;         // número de sesión (para que el dashboard sepa cuándo empieza una nueva)
+let calibrando = false, ultimaDiam = [];     // calibrando: se pueden tocar marcadores y cambiar el color
+let colorMarc = null, modoMuestreo = false;   // color de los marcadores: {h, tolH, sMin, vMin}
+const RAD_FRAC = 0.1;          // radio de búsqueda alrededor del punto elegido: 1/10 del ancho de la imagen
+const DIAM_MAX_FRAC = 0.1;     // diámetro máximo de un marcador: 1/10 del ancho de la imagen
 let evento = null, manualPedido = false, picos = [], ultimoDisparo = -1e9, ultimoAviso = 0;
 const EVENTO_MAX = 0.25;          // s máximos para buscar el pico de sonido de un disparo
 const REFRACTARIO = 1.0;          // s mínimos entre disparos (evita contar el eco o el propio ruido dos veces)
@@ -88,7 +152,6 @@ let audioCtx = null, analyser = null, bufAudio = null, micStream = null, picoPct
 const work = document.createElement("canvas"), wctx = work.getContext("2d", { willReadFrequently: true });
 const vista = $("vista"), ctx = vista.getContext("2d"), video = $("video");
 
-try { rango = JSON.parse(localStorage.getItem("rangoColor") || "null"); } catch (e) { rango = null; }
 try { const u = localStorage.getItem("umbralVol"); if (u !== null) $("umbral").value = u; } catch (e) {}
 function estado(t) { $("estado").textContent = t; }
 function numero(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : Math.max(0, v); }
@@ -101,14 +164,27 @@ $("umbral").addEventListener("input", () => {
 
 /* ---------- Sesión ---------- */
 async function entrar() {
+  modo = document.querySelector('input[name="modo"]:checked').value;
+  try { localStorage.setItem("modoDisp", modo); } catch (e) {}
   const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("pwd").value });
   if (error) { alert("No se pudo iniciar sesión: " + error.message); return; }
   mostrar(true);
 }
-async function salir() { detener(); await sb.auth.signOut(); mostrar(false); }
+async function salir() {
+  if (porGuardar && muestras.length && !confirm("Hay una sesión sin guardar. ¿Salir sin guardarla?")) return;
+  porGuardar = false;
+  const borrado = detener();                     // la fila en directo se borra antes de cerrar sesión
+  if (borrado) { try { await borrado; } catch (e) {} }
+  detenerDashboard();
+  await sb.auth.signOut(); mostrar(false);
+}
+window.addEventListener("beforeunload", e => { if (porGuardar && muestras.length) { e.preventDefault(); e.returnValue = ""; } });
 function mostrar(dentro) {
   $("vistaLogin").classList.toggle("oculto", dentro);
   $("vistaApp").classList.toggle("oculto", !dentro);
+  document.body.classList.toggle("modo-dash", dentro && modo === "dash");
+  $("titulo").textContent = dentro && modo === "dash" ? "Dashboard en directo" : "Captura de marcadores";
+  if (dentro && modo === "dash") iniciarDashboard(); else detenerDashboard();
   if (dentro) dibujarGraficos();
 }
 sb.auth.getSession().then(({ data }) => mostrar(!!data.session));
@@ -128,10 +204,14 @@ async function iniciarCamara() {
   work.width = vista.width = W; work.height = vista.height = H;
   mask = new Uint8Array(W * H); pila = new Int32Array(W * H);
   corriendo = true;
-  $("bCamara").disabled = true; $("bGrabar").disabled = false; $("bDisparo").disabled = true;
+  $("bCamara").disabled = true; $("bGrabar").disabled = false; $("bDisparo").disabled = true; $("bRecal").disabled = false;
+  marcas = []; ultimaDiam = []; fijarCalibrando(true);
+  dibujarGraficos();
   const micOk = await iniciarAudio();
-  estado((rango ? "Cámara activa (color calibrado). " : "Cámara activa. Toca un marcador para calibrar su color. ") +
+  estado((colorMarc ? `Cámara activa. Toca el marcador 1 de ${Math.max(1, parseInt($("nmarc").value) || 3)}. `
+                    : "Cámara activa. Elige el color de los marcadores. ") +
          (micOk ? "Micrófono activo." : "Sin micrófono: solo podrás usar el disparo manual."));
+  iniciarDirecto();
   requestAnimationFrame(bucle);
 }
 
@@ -170,11 +250,14 @@ function detenerAudio() {
   micStream = null; analyser = null;
 }
 function detener() {
+  const borrado = pararDirecto();
   corriendo = false; grabando = false;
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = null; detenerAudio();
-  $("bCamara").disabled = false; $("bGrabar").disabled = true; $("bDisparo").disabled = true;
+  $("bCamara").disabled = false; $("bGrabar").disabled = true; $("bDisparo").disabled = true; $("bRecal").disabled = true;
+  marcas = []; modoMuestreo = false; fijarCalibrando(false);
   $("bGrabar").textContent = "2. Iniciar sesión";
+  return borrado;
 }
 
 /* ---------- Volumen ---------- */
@@ -208,70 +291,232 @@ function rgb2hsv(r, g, b) {                 // devuelve h (0-360), s (0-1), v (0
   return [h, mx === 0 ? 0 : d / mx, mx / 255];
 }
 
-/* Calibración: tocar un marcador en la imagen */
-vista.addEventListener("click", e => {
+/* ---------- Color de los marcadores (máscara de color) ---------- */
+const COLORES_BASE = [["Rojo", 0], ["Naranja", 25], ["Amarillo", 55], ["Verde", 120], ["Azul", 215], ["Morado", 280], ["Rosa", 325]];
+const tolActual = () => parseFloat($("tolH").value) || 20;
+
+// ¿Este píxel (r, g, b) pertenece a la máscara del color elegido?
+function coincide(c, r, g, b) {
+  const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+  const d = mx - mn;
+  if (d === 0 || mx / 255 < c.vMin || d / mx < c.sMin) return false;
+  let h;
+  if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+  h *= 60; if (h < 0) h += 360;
+  let dh = Math.abs(h - c.h); if (dh > 180) dh = 360 - dh;
+  return dh <= c.tolH;
+}
+function fijarColor(h, s, v, nombre) {
+  colorMarc = { h, tolH: tolActual(), sMin: Math.max(0.2, s - 0.4), vMin: Math.max(0.15, v - 0.45) };
+  $("colorTxt").innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle;background:hsl(${Math.round(h)},${Math.round(Math.max(s, .4) * 100)}%,${Math.round(Math.min(Math.max(v * 55, 35), 60))}%)"></span>${nombre}`;
+  try { localStorage.setItem("colorMarc", JSON.stringify({ h, s, v, nombre })); } catch (e) {}
+}
+function iniciarSelectorColor() {
+  const cont = $("swatches");
+  COLORES_BASE.forEach(([nombre, h]) => {
+    const b = document.createElement("button");
+    b.className = "sw"; b.title = nombre; b.style.background = `hsl(${h},85%,50%)`;
+    b.onclick = () => {
+      cont.querySelectorAll(".sw").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
+      fijarColor(h, 0.8, 0.7, nombre);
+      estado(marcas.length < N ? `Color ${nombre.toLowerCase()} elegido. Toca el marcador ${marcas.length + 1} de ${N}.` : `Color ${nombre.toLowerCase()} elegido.`);
+    };
+    cont.appendChild(b);
+  });
+  $("colorPick").addEventListener("input", e => {
+    const hex = e.target.value, r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), bl = parseInt(hex.slice(5, 7), 16);
+    const [h, s, v] = rgb2hsv(r, g, bl);
+    cont.querySelectorAll(".sw").forEach(x => x.classList.remove("sel"));
+    if (s < 0.25) estado("Ese color es casi gris: elige un color más vivo.");
+    fijarColor(h, s, v, "personalizado");
+  });
+  $("tolH").addEventListener("input", () => {
+    if (colorMarc) colorMarc.tolH = tolActual();
+  });
+  try {
+    const g = JSON.parse(localStorage.getItem("colorMarc") || "null");
+    if (g) fijarColor(g.h, g.s, g.v, g.nombre || "guardado");
+  } catch (e) {}
+}
+function fijarCalibrando(v) {
+  calibrando = v;
+  document.querySelectorAll("#swatches button, #colorPick, #tolH").forEach(el => { el.disabled = !v; });
+  $("bMuestra").disabled = !v || !corriendo;
+  $("colorHint").textContent = v ? "" : (corriendo ? "Pulsa «Calibrar» para cambiar el color o los marcadores." : "");
+  publicar();
+}
+function muestrear() {
   if (!corriendo) return;
-  const r = vista.getBoundingClientRect();
-  const x = Math.round((e.clientX - r.left) * W / r.width), y = Math.round((e.clientY - r.top) * H / r.height);
-  const px = wctx.getImageData(Math.max(0, x - 2), Math.max(0, y - 2), 5, 5).data;
+  modoMuestreo = true;
+  estado("Toca un marcador para tomar su color.");
+}
+function pintarMascara() {                       // vista previa: blanco = color elegido, el resto oscurecido
+  const im = ctx.getImageData(0, 0, W, H), d = im.data;
+  for (let p = 0; p < d.length; p += 4) {
+    if (coincide(colorMarc, d[p], d[p + 1], d[p + 2])) { d[p] = d[p + 1] = d[p + 2] = 255; }
+    else { d[p] *= 0.3; d[p + 1] *= 0.3; d[p + 2] *= 0.3; }
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
+/* ---------- Selección manual: se tocan los marcadores uno por uno ---------- */
+function pixelCercano(img, tx, ty, ok) {         // el toque con el dedo no es exacto: píxel válido más cercano
+  const rs = Math.max(6, Math.round(W * 0.03));
+  let cand = null;
+  for (let y = Math.max(0, ty - rs); y <= Math.min(H - 1, ty + rs); y++)
+    for (let x = Math.max(0, tx - rs); x <= Math.min(W - 1, tx + rs); x++) {
+      const dd = (x - tx) ** 2 + (y - ty) ** 2;
+      if (dd > rs * rs) continue;
+      const p = (y * W + x) * 4;
+      if (ok(img[p], img[p + 1], img[p + 2]) && (!cand || dd < cand.dd)) cand = { x, y, dd };
+    }
+  return cand;
+}
+function masVivo(img, cx, cy, ok) {              // centra en el píxel más vivo de los alrededores (el borde se mezcla con el fondo)
+  let sx = cx, sy = cy, mejor = -1;
+  for (let y = Math.max(0, cy - 3); y <= Math.min(H - 1, cy + 3); y++)
+    for (let x = Math.max(0, cx - 3); x <= Math.min(W - 1, cx + 3); x++) {
+      const p = (y * W + x) * 4;
+      if (!ok(img[p], img[p + 1], img[p + 2])) continue;
+      const [, s, v] = rgb2hsv(img[p], img[p + 1], img[p + 2]);
+      if (s * v > mejor) { mejor = s * v; sx = x; sy = y; }
+    }
+  return { x: sx, y: sy };
+}
+function colorMedio(img, sx, sy) {               // color medio de 3x3
   let sr = 0, sg = 0, sb2 = 0, k = 0;
-  for (let i = 0; i < px.length; i += 4) { sr += px[i]; sg += px[i + 1]; sb2 += px[i + 2]; k++; }
-  const [h, s, v] = rgb2hsv(sr / k, sg / k, sb2 / k);
-  rango = { h, tolH: 20, sMin: Math.max(0.2, s - 0.4), vMin: Math.max(0.15, v - 0.45) };
-  try { localStorage.setItem("rangoColor", JSON.stringify(rango)); } catch (e) {}
-  estado("Color calibrado (tono " + Math.round(h) + "°).");
-});
+  for (let y = Math.max(0, sy - 1); y <= Math.min(H - 1, sy + 1); y++)
+    for (let x = Math.max(0, sx - 1); x <= Math.min(W - 1, sx + 1); x++) {
+      const p = (y * W + x) * 4; sr += img[p]; sg += img[p + 1]; sb2 += img[p + 2]; k++;
+    }
+  return rgb2hsv(sr / k, sg / k, sb2 / k);
+}
+
+function tocar(e) {
+  if (!corriendo) return;
+  if (!calibrando) { estado("Pulsa «Calibrar» para volver a elegir los marcadores o cambiar el color."); return; }
+  N = Math.max(1, parseInt($("nmarc").value) || 3);
+  const r = vista.getBoundingClientRect();
+  const tx = Math.round((e.clientX - r.left) * W / r.width), ty = Math.round((e.clientY - r.top) * H / r.height);
+  const img = wctx.getImageData(0, 0, W, H).data;
+  const vivo = (R_, G_, B_) => { const [, s, v] = rgb2hsv(R_, G_, B_); return s >= 0.35 && v >= 0.3; };
+  let ok = (R_, G_, B_) => coincide(colorMarc, R_, G_, B_);
+  let seed;
+
+  if (modoMuestreo || !colorMarc) {
+    // Se toma el color del marcador tocado (si no había color elegido, este toque también cuenta como el marcador 1)
+    const implicito = !modoMuestreo;
+    const c = pixelCercano(img, tx, ty, vivo);
+    if (!c) { estado("No veo un color claro ahí. Toca más cerca del marcador."); return; }
+    seed = masVivo(img, c.x, c.y, vivo);
+    const [h, s, v] = colorMedio(img, seed.x, seed.y);
+    fijarColor(h, s, v, "tomado de la imagen");
+    $("swatches").querySelectorAll(".sw").forEach(x => x.classList.remove("sel"));
+    modoMuestreo = false;
+    if (!implicito) { estado(marcas.length < N ? `Color tomado. Toca el marcador ${marcas.length + 1} de ${N}.` : "Color tomado."); return; }
+  } else {
+    if (marcas.length >= N) { fijarCalibrando(false); estado(`Ya están los ${N} marcadores. Pulsa «Calibrar» para volver a elegirlos.`); return; }
+    const c = pixelCercano(img, tx, ty, ok);
+    if (!c) { estado("No veo el color elegido ahí. Toca más cerca de un marcador de ese color."); return; }
+    seed = masVivo(img, c.x, c.y, ok);
+  }
+  if (marcas.length >= N) return;
+  if (marcas.some(m => Math.hypot(m.x - seed.x, m.y - seed.y) < W * 0.02)) { estado("Ese marcador ya está seleccionado."); return; }
+  marcas.push({ x: seed.x, y: seed.y });
+  if (marcas.length < N) estado(`Marcador ${marcas.length} elegido. Toca el marcador ${marcas.length + 1} de ${N}.`);
+  else { fijarCalibrando(false); estado(`Calibración completa: ${N} marcadores elegidos. Ajusta el volumen e inicia la sesión.`); }
+}
+vista.addEventListener("click", tocar);
+
+function calibrar() {
+  marcas = []; evento = null; modoMuestreo = false; ultimaDiam = [];
+  fijarCalibrando(true);
+  N = Math.max(1, parseInt($("nmarc").value) || 3);
+  estado((colorMarc ? `Calibrando: toca el marcador 1 de ${N} (también puedes cambiar el color).` : "Calibrando: elige primero el color de los marcadores.") +
+         (grabando ? " Mientras tanto no se capturan disparos." : ""));
+  dibujarGraficos();
+}
+$("nmarc").addEventListener("change", () => { if (corriendo) calibrar(); });
 
 /* ---------- Detección en cada fotograma (JavaScript puro, sin librerías) ---------- */
-function detectar() {
-  const found = [];
-  if (!rango) return found;
-  const img = wctx.getImageData(0, 0, W, H).data, n = W * H;
-  for (let i = 0, p = 0; i < n; i++, p += 4) {
-    mask[i] = 0;
-    const r = img[p], g = img[p + 1], b = img[p + 2];
-    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
-    const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
-    const d = mx - mn;
-    if (d === 0 || mx / 255 < rango.vMin || d / mx < rango.sMin) continue;
-    let h;
-    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
-    h *= 60; if (h < 0) h += 360;
-    let dh = Math.abs(h - rango.h); if (dh > 180) dh = 360 - dh;
-    if (dh <= rango.tolH) mask[i] = 1;
-  }
-  // componentes conexas (4 vecinos) con pila
-  for (let i = 0; i < n; i++) {
-    if (mask[i] !== 1) continue;
-    let top = 0, area = 0, sx = 0, sy = 0;
-    pila[top++] = i; mask[i] = 2;
-    while (top > 0) {
-      const q = pila[--top], x = q % W, y = (q - x) / W;
-      area++; sx += x; sy += y;
-      if (x > 0 && mask[q - 1] === 1) { mask[q - 1] = 2; pila[top++] = q - 1; }
-      if (x < W - 1 && mask[q + 1] === 1) { mask[q + 1] = 2; pila[top++] = q + 1; }
-      if (y > 0 && mask[q - W] === 1) { mask[q - W] = 2; pila[top++] = q - W; }
-      if (y < H - 1 && mask[q + W] === 1) { mask[q + W] = 2; pila[top++] = q + W; }
+// Cada marcador se busca SOLO dentro de un círculo de radio 1/10 del ancho alrededor del punto elegido.
+// Dentro de esa zona se construye la máscara del color elegido y se buscan manchas con forma de círculo:
+// diámetro máximo 1/10 del ancho, bien redondeadas (se descartan rayas, esquinas y manchas recortadas).
+function detectarMarca(m, img) {
+  const R = Math.round(W * RAD_FRAC), R2 = R * R, maxD = W * DIAM_MAX_FRAC;
+  const x0 = Math.max(0, Math.round(m.x) - R), x1 = Math.min(W - 1, Math.round(m.x) + R);
+  const y0 = Math.max(0, Math.round(m.y) - R), y1 = Math.min(H - 1, Math.round(m.y) + R);
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      const i = y * W + x, p = i * 4;
+      mask[i] = ((x - m.x) ** 2 + (y - m.y) ** 2 <= R2 && coincide(colorMarc, img[p], img[p + 1], img[p + 2])) ? 1 : 0;
     }
-    if (area >= MIN_AREA) found.push({ x: sx / area + 0.5, y: sy / area + 0.5, a: area });
-  }
-  found.sort((p, q) => q.a - p.a);
-  const top = found.slice(0, N);
-  top.sort((p, q) => p.y - q.y);                         // numeración de arriba abajo
-  top.forEach(f => f.d = Math.sqrt(4 * f.a / Math.PI));  // diámetro equivalente en px
-  return top;
+  let elegido = null;
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      const i = y * W + x;
+      if (mask[i] !== 1) continue;
+      let top = 0, area = 0, sx = 0, sy = 0, cortada = false;
+      let bx0 = x, bx1 = x, by0 = y, by1 = y;
+      pila[top++] = i; mask[i] = 2;
+      while (top > 0) {                          // componente conexa (4 vecinos) sin salirse de la ventana
+        const q = pila[--top], qx = q % W, qy = (q - qx) / W;
+        area++; sx += qx; sy += qy;
+        if (qx < bx0) bx0 = qx; if (qx > bx1) bx1 = qx; if (qy < by0) by0 = qy; if (qy > by1) by1 = qy;
+        // si la mancha llega al borde del círculo de búsqueda, está recortada: es más grande que un marcador
+        if (!cortada && (((qx + 1 < W) && (qx + 1 - m.x) ** 2 + (qy - m.y) ** 2 > R2) || ((qx > 0) && (qx - 1 - m.x) ** 2 + (qy - m.y) ** 2 > R2) ||
+                         ((qy + 1 < H) && (qx - m.x) ** 2 + (qy + 1 - m.y) ** 2 > R2) || ((qy > 0) && (qx - m.x) ** 2 + (qy - 1 - m.y) ** 2 > R2))) cortada = true;
+        if (qx > x0 && mask[q - 1] === 1) { mask[q - 1] = 2; pila[top++] = q - 1; }
+        if (qx < x1 && mask[q + 1] === 1) { mask[q + 1] = 2; pila[top++] = q + 1; }
+        if (qy > y0 && mask[q - W] === 1) { mask[q - W] = 2; pila[top++] = q - W; }
+        if (qy < y1 && mask[q + W] === 1) { mask[q + W] = 2; pila[top++] = q + W; }
+      }
+      if (area < MIN_AREA || cortada) continue;
+      const dEq = Math.sqrt(4 * area / Math.PI);
+      if (dEq > maxD) continue;                  // demasiado grande para ser un marcador
+      // forma de círculo: casi tan ancho como alto y ocupando ~π/4 de su caja (un círculo ≈ 0,79)
+      const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+      const aspecto = Math.min(bw, bh) / Math.max(bw, bh), relleno = area / (bw * bh);
+      if (aspecto < 0.6 || relleno < 0.5 || (area >= 40 && relleno > 0.93)) continue;
+      const cx = sx / area + 0.5, cy = sy / area + 0.5, dist = Math.hypot(cx - m.x, cy - m.y);
+      if (dist > R) continue;
+      if (!elegido || dist < elegido.dist) elegido = { x: cx, y: cy, a: area, d: dEq, dist };
+    }
+  return elegido;
+}
+function detectar() {
+  if (!marcas.length || !colorMarc) return [];
+  const img = wctx.getImageData(0, 0, W, H).data;
+  return marcas.map(m => detectarMarca(m, img));
 }
 
 function bucle() {
   if (!corriendo) return;
   N = Math.max(1, parseInt($("nmarc").value) || 3);
   wctx.drawImage(video, 0, 0, W, H);
-  const found = detectar();
+  const det = detectar();                                       // un elemento por marcador elegido (o null si no se ve)
+  const found = (marcas.length === N && det.every(Boolean)) ? det : [];   // fotograma válido: se ven los N marcadores
+  if (found.length === N) {                                     // diámetros actuales: dan la escala (mm/px) antes del primer disparo
+    const primera = ultimaDiam.length === 0;
+    ultimaDiam = found.map(f => f.d / escala);
+    if (primera) { dibujarGraficos(); publicar(); }
+  }
   ctx.drawImage(work, 0, 0);
-  ctx.lineWidth = 2; ctx.font = "16px sans-serif"; ctx.strokeStyle = "#22c55e"; ctx.fillStyle = "#22c55e";
-  found.forEach((f, i) => {
-    ctx.beginPath(); ctx.arc(f.x, f.y, f.d / 2 + 4, 0, 2 * Math.PI); ctx.stroke();
-    ctx.fillText(String(i + 1), f.x + f.d / 2 + 6, f.y);
+  if (colorMarc && $("verMask").checked) pintarMascara();
+  ctx.font = "16px sans-serif";
+  const Rb = Math.round(W * RAD_FRAC);
+  marcas.forEach((m, i) => {
+    const c = COLORES[i % COLORES.length], f = det[i];
+    ctx.strokeStyle = c; ctx.fillStyle = c;
+    ctx.globalAlpha = 0.6; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.arc(m.x, m.y, Rb, 0, 2 * Math.PI); ctx.stroke();   // zona de búsqueda
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    if (f) {
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.d / 2 + 4, 0, 2 * Math.PI); ctx.stroke();
+      ctx.fillText(String(i + 1), f.x + f.d / 2 + 6, f.y);
+    } else ctx.fillText((i + 1) + "?", m.x + 4, m.y - 4);                    // marcador perdido
   });
 
   const nivel = leerNivel();
@@ -313,8 +558,9 @@ function bucle() {
 
 /* ---------- Disparos y sesión ---------- */
 function guardarTiro(fila, picoDb) {
-  disparos.push(fila[0]); muestras.push(fila); picos.push(picoDb);
-  dibujarGraficos();
+  disparos.push(fila[0]); muestras.push(fila); picos.push(picoDb); ids.push(++contadorId); vis.push(true);
+  pintarLista(); $("listaDisparos").scrollTop = $("listaDisparos").scrollHeight;
+  dibujarGraficos(); publicar();
 }
 function cerrarEvento() {
   if (!evento) return;
@@ -323,34 +569,75 @@ function cerrarEvento() {
   evento = null;
 }
 function disparoManual() { if (grabando) manualPedido = true; }
+
+/* ---------- Lista de disparos: ver / ocultar y eliminar ---------- */
+function contador() {
+  $("nDisp").textContent = muestras.length ? `(${vis.filter(Boolean).length} de ${muestras.length} visibles)` : "";
+}
+function pintarLista() {
+  const cont = $("listaDisparos");
+  contador();
+  if (!muestras.length) { cont.innerHTML = '<div class="tiro" style="color:#888">Todavía no hay disparos.</div>'; return; }
+  cont.innerHTML = muestras.map((f, i) =>
+    `<div class="tiro"><label><input type="checkbox" data-i="${i}"${vis[i] ? " checked" : ""}> Disparo ${ids[i]} · ${f[0].toFixed(1)} s` +
+    `${picos[i] != null ? " · " + picos[i] + " dB" : " · manual"}</label>` +
+    `${modo === "dash" ? "" : `<button data-del="${i}"${guardada ? " disabled" : ""}>Eliminar</button>`}</div>`).join("");
+}
+function verTodos(v) { vis = vis.map(() => v); pintarLista(); dibujarGraficos(); }
+function eliminarTiro(i) {
+  if (guardada) { estado("Esta sesión ya está guardada: eliminar ahora no cambiaría lo guardado."); return; }
+  if (!confirm(`¿Eliminar el disparo ${ids[i]} de la sesión?`)) return;
+  [muestras, disparos, picos, ids, vis].forEach(a => a.splice(i, 1));
+  eliminados++;
+  if (porGuardar) $("bGuardar").disabled = muestras.length === 0;
+  pintarLista(); dibujarGraficos(); publicar();
+}
+$("listaDisparos").addEventListener("change", e => {
+  if (e.target.dataset.i === undefined) return;
+  vis[+e.target.dataset.i] = e.target.checked;
+  contador(); dibujarGraficos();
+});
+$("listaDisparos").addEventListener("click", e => {
+  if (e.target.dataset.del !== undefined) eliminarTiro(+e.target.dataset.del);
+});
+
 function alternarSesion() {
   if (!grabando) {
-    muestras = []; disparos = []; picos = []; perdidos = 0; sinMarc = 0; evento = null; manualPedido = false; ultimoDisparo = -1e9;
-    t0 = performance.now(); grabando = true;
-    $("bGrabar").textContent = "Terminar y guardar"; $("bDisparo").disabled = false;
-    dibujarGraficos();
+    if (porGuardar && muestras.length && !confirm("Hay una sesión sin guardar. ¿Descartarla y empezar una nueva?")) return;
+    muestras = []; disparos = []; picos = []; ids = []; vis = []; contadorId = 0; eliminados = 0;
+    perdidos = 0; sinMarc = 0; evento = null; manualPedido = false; ultimoDisparo = -1e9;
+    porGuardar = false; guardada = false; $("bGuardar").disabled = true;
+    t0 = performance.now(); grabando = true; contadorSesion++;
+    $("bGrabar").textContent = "Terminar sesión"; $("bDisparo").disabled = false;
+    pintarLista(); dibujarGraficos(); publicar(true);
   } else {
     cerrarEvento();
-    grabando = false; $("bGrabar").textContent = "2. Iniciar sesión"; $("bDisparo").disabled = true;
-    guardar();
+    grabando = false; duracion = (performance.now() - t0) / 1000;
+    $("bGrabar").textContent = "2. Iniciar sesión"; $("bDisparo").disabled = true;
+    porGuardar = muestras.length > 0; $("bGuardar").disabled = !porGuardar;
+    publicar(true);
+    estado(porGuardar ? "Sesión terminada. Revisa la lista de disparos (elimina los que no valgan) y pulsa «Guardar sesión»."
+                      : "Sesión terminada sin ningún disparo capturado.");
   }
 }
-async function guardar() {
-  if (disparos.length === 0) { estado("No se ha capturado ningún disparo; no hay nada que guardar."); return; }
+async function guardarSesion() {
+  if (!muestras.length) { estado("No hay disparos que guardar."); return; }
   const datos = {
     etiqueta: $("etiqueta").value.trim(), n_marcadores: N,
     diametro_mm: parseFloat($("diam").value) || null,
     ancho: video.videoWidth, alto: video.videoHeight,
-    duracion_s: (performance.now() - t0) / 1000,
+    duracion_s: duracion,
     umbral_db: Math.round(pctADb(umbralPct())),
-    disparos_sin_marcadores: sinMarc, frames_perdidos: perdidos,
+    color_tono: colorMarc ? Math.round(colorMarc.h) : null,
+    disparos_sin_marcadores: sinMarc, disparos_eliminados: eliminados, frames_perdidos: perdidos,
     disparos, picos_db: picos,
     muestras      // una fila por disparo: [t, x1, y1, d1, x2, y2, d2, ...]
   };
-  estado("Guardando…");
+  $("bGuardar").disabled = true; estado("Guardando…");
   const { error } = await sb.from("sesiones").insert({ datos });
-  estado(error ? "Error al guardar: " + error.message
-               : `Sesión guardada: ${disparos.length} disparo(s), una foto por disparo. No se ha almacenado vídeo ni audio.`);
+  if (error) { $("bGuardar").disabled = false; estado("Error al guardar: " + error.message); return; }
+  porGuardar = false; guardada = true; pintarLista(); publicar(true);
+  estado(`Sesión guardada: ${muestras.length} disparo(s), una foto por disparo. No se ha almacenado vídeo ni audio.`);
 }
 
 /* ---------- Gráficos en directo ---------- */
@@ -367,14 +654,23 @@ function grafico(cv, grupos, o) {
   g.font = "11px sans-serif"; g.fillStyle = "#111"; g.fillText(o.titulo, 8, 14);
   const todos = [];
   grupos.forEach(gr => gr.trazos.forEach(tr => tr.forEach(p => todos.push(p))));
-  if (!todos.length) { g.fillStyle = "#888"; g.fillText("Sin datos todavía", w / 2 - 45, h / 2); return; }
-  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
-  todos.forEach(p => { xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); });
-  if (xmax - xmin < 1e-9) { xmin -= 1; xmax += 1; }
-  if (ymax - ymin < 1e-9) { ymin -= 1; ymax += 1; }
-  const dx = (xmax - xmin) * 0.05, dy = (ymax - ymin) * 0.05;
-  xmin -= dx; xmax += dx; ymin -= dy; ymax += dy;
+  if (!todos.length && !o.limites) { cv._m = null; g.fillStyle = "#888"; g.fillText("Sin datos todavía", w / 2 - 45, h / 2); return; }
+  let xmin = 0, xmax = 1, ymin = 0, ymax = 1;
+  if (todos.length) {
+    xmin = Infinity; xmax = -Infinity; ymin = Infinity; ymax = -Infinity;
+    todos.forEach(p => { xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); });
+    if (xmax - xmin < 1e-9) { xmin -= 1; xmax += 1; }
+    if (ymax - ymin < 1e-9) { ymin -= 1; ymax += 1; }
+    const dx = (xmax - xmin) * 0.05, dy = (ymax - ymin) * 0.05;
+    xmin -= dx; xmax += dx; ymin -= dy; ymax += dy;
+    if (o.simetrico) { const m = Math.max(Math.abs(ymin), Math.abs(ymax)); ymin = -m; ymax = m; }   // la media (0) queda en el centro
+  }
+  if (o.limites) ({ xmin, xmax, ymin, ymax } = o.limites);        // p. ej. las medidas de la cámara
   const L = 46, R = 8, T = 22, B = 30;
+  const base = { xmin, xmax, ymin, ymax };
+  if (cv._vista) ({ xmin, xmax, ymin, ymax } = cv._vista);       // zoom elegido por el usuario
+  cv.style.touchAction = cv._vista ? "none" : "pan-y";
+  cv._m = { L, R, T, B, w, h, xmin, xmax, ymin, ymax, base, invertY: !!o.invertY };
   const px = x => L + (x - xmin) / (xmax - xmin) * (w - L - R);
   const py = y => o.invertY ? T + (y - ymin) / (ymax - ymin) * (h - T - B)
                             : h - B - (y - ymin) / (ymax - ymin) * (h - T - B);
@@ -387,6 +683,9 @@ function grafico(cv, grupos, o) {
     g.fillText(fmt(vy), 2, py(vy) + 4);
   }
   g.fillStyle = "#333"; g.fillText(o.xl, L + (w - L - R) / 2 - 30, h - 4);
+  if (o.limites) { g.strokeStyle = "#6b7280"; g.lineWidth = 1.5; g.strokeRect(L, T, w - L - R, h - T - B); }   // borde de la imagen
+  if (!todos.length) { g.fillStyle = "#888"; g.fillText("Sin disparos todavía", L + (w - L - R) / 2 - 50, T + 18); }
+  g.save(); g.beginPath(); g.rect(L, T, w - L - R, h - T - B); g.clip();   // con zoom, nada se sale del área del gráfico
   if (o.cero && xmin < 0 && xmax > 0) {                  // línea vertical en el instante del disparo
     g.strokeStyle = "#111"; g.setLineDash([4, 3]);
     g.beginPath(); g.moveTo(px(0), T); g.lineTo(px(0), h - B); g.stroke(); g.setLineDash([]);
@@ -395,18 +694,31 @@ function grafico(cv, grupos, o) {
     g.strokeStyle = "#111"; g.lineWidth = 1; g.setLineDash([4, 3]);
     g.beginPath(); g.moveTo(L, py(0)); g.lineTo(w - R, py(0)); g.stroke(); g.setLineDash([]);
   }
+  if (o.figuras && o.figuras.length) {                   // figura que dibujan los marcadores en cada disparo (el último, más marcado)
+    const nF = o.figuras.length;
+    o.figuras.forEach((pts, j) => {
+      g.strokeStyle = "#374151"; g.globalAlpha = nF === 1 ? 1 : 0.2 + 0.8 * j / (nF - 1); g.lineWidth = j === nF - 1 ? 2.5 : 1.2;
+      g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke();
+    });
+    g.globalAlpha = 1;
+  }
   grupos.forEach(gr => {
     g.strokeStyle = gr.color; g.fillStyle = gr.color; g.lineWidth = 1.5;
     gr.trazos.forEach(tr => {
-      if (o.lineas) { g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke(); }
+      if (o.lineas) {
+        if (o.figuras && o.figuras.length) g.globalAlpha = 0.45;
+        g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke();
+        g.globalAlpha = 1;
+      }
       if (o.puntos) tr.forEach(p => { g.beginPath(); g.arc(px(p[0]), py(p[1]), 3, 0, 6.2832); g.fill(); });
       if (o.numeros && tr.length <= 30) {               // número de orden de cada disparo
         g.font = "9px sans-serif"; g.fillStyle = "#111";
-        tr.forEach((p, j) => g.fillText(String(j + 1), px(p[0]) + 4, py(p[1]) - 4));
+        tr.forEach((p, j) => g.fillText(String(gr.etiquetas ? gr.etiquetas[j] : j + 1), px(p[0]) + 4, py(p[1]) - 4));
         g.font = "11px sans-serif"; g.fillStyle = gr.color;
       }
     });
   });
+  g.restore();
   grupos.forEach((gr, i) => {                            // leyenda
     const x = w - R - (grupos.length - i) * 38;
     g.fillStyle = gr.color; g.fillRect(x, 6, 8, 8);
@@ -421,23 +733,274 @@ function dibujarGraficos() {
   const mm = diam > 0;                                   // sin diámetro real no se puede pasar a distancias
   const u = mm ? "mm" : "px";
   const nm = Math.min(Math.max(1, parseInt($("nmarc").value) || 3), COLORES.length);
-  const gP = [], gX = [], gY = [];
+  const iv = muestras.map((_, i) => i).filter(i => vis[i] !== false);        // disparos marcados para ver
+  const mv = iv.map(i => muestras[i]), idv = iv.map(i => ids[i]);
+  const gP = [], gX = [], gY = [], ks = [];
+  // UNA sola escala (mm por píxel) para toda la sesión, igual en X y en Y y para todos los marcadores:
+  // diámetro real / mediana de los diámetros medidos de todos los marcadores en todos los disparos.
+  // (Una escala por marcador deformaba la figura: con marcadores de pocos píxeles el diámetro medido varía mucho de uno a otro.)
+  const dTodos = [];
+  muestras.forEach(f => { for (let i = 0; i < nm; i++) if (f.length > 3 + 3 * i) dTodos.push(f[3 + 3 * i]); });
+  const dRef = dTodos.length ? mediana(dTodos) : (ultimaDiam.length ? mediana(ultimaDiam) : null);   // antes del primer disparo, el diámetro en directo
+  const kUnica = mm && dRef ? diam / dRef : null;
   for (let i = 0; i < nm; i++) {
-    const fs = muestras.filter(f => f.length > 3 + 3 * i);
-    // mm por píxel de este marcador: diámetro real / diámetro en píxeles medido en las fotos (mediana de la sesión)
-    const k = mm && fs.length ? diam / mediana(fs.map(f => f[3 + 3 * i])) : 1;
-    const pos = fs.map(f => ({ t: f[0], x: f[1 + 3 * i] * k, y: f[2 + 3 * i] * k }));
-    const mx = pos.length ? media(pos.map(p => p.x)) : 0, my = pos.length ? media(pos.map(p => p.y)) : 0;
-    gP.push({ color: COLORES[i], trazos: [pos.map(p => [p.x, p.y])] });          // posición absoluta, en orden cronológico
-    gX.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, p.x - mx])] });     // distancia a la media en X
-    gY.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, my - p.y])] });     // distancia a la media en Y (+ = arriba)
+    ks.push(kUnica);
+    const k = kUnica || 1;
+    const pos = [];
+    mv.forEach((f, j) => { if (f.length > 3 + 3 * i) pos.push({ t: f[0], id: idv[j], x: f[1 + 3 * i] * k, y: f[2 + 3 * i] * k }); });
+    const mx = pos.length ? media(pos.map(p => p.x)) : 0, my = pos.length ? media(pos.map(p => p.y)) : 0;   // media de los disparos visibles
+    const et = pos.map(p => p.id);
+    gP.push({ color: COLORES[i], etiquetas: et, trazos: [pos.map(p => [p.x, p.y])] });         // posición absoluta, en orden cronológico
+    gX.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, p.x - mx])] });                    // distancia a la media en X
+    gY.push({ color: COLORES[i], trazos: [pos.map(p => [p.t, my - p.y])] });                    // distancia a la media en Y (+ = arriba)
   }
-  const n = muestras.length;
-  const aviso = mm ? "" : " · escribe el diámetro real para ver mm";
-  grafico($("g1"), gP, { titulo: `1) Posición de cada marcador, ${n} disparo(s) en orden cronológico${aviso}`, xl: `X (${u})`, lineas: true, puntos: true, numeros: true, invertY: true });
-  grafico($("g2"), gX, { titulo: `2) Desplazamiento en X respecto a la media (${u}, 0 = media)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true });
-  grafico($("g3"), gY, { titulo: `3) Desplazamiento en Y respecto a la media (${u}, 0 = media, + = arriba)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true });
+  const n = mv.length;
+  const cuenta = n === muestras.length ? `${n}` : `${n} de ${muestras.length}`;
+
+  // Gráfico 1: los ejes son las medidas de la cámara, con la misma proporción que la imagen
+  const anchoPx = (modo === "dash" ? remoto && remoto.ancho : video.videoWidth) || 0, altoPx = (modo === "dash" ? remoto && remoto.alto : video.videoHeight) || 0;
+  const conEscala = mm && ks.length > 0 && ks.every(Boolean);
+  const kM = conEscala ? kUnica : 1, u1 = conEscala ? "mm" : "px";
+  const cv1 = $("g1");
+  const o1 = { xl: `X (${u1})`, lineas: true, puntos: true, numeros: true, invertY: true };
+  let medidas = "";
+  if (anchoPx && altoPx) {
+    const aw = anchoPx * kM, ah = altoPx * kM;
+    cv1.style.height = Math.round(((cv1.clientWidth || 320) - 46 - 8) * ah / aw + 22 + 30) + "px";   // alto del lienzo según la proporción
+    o1.limites = { xmin: 0, xmax: aw, ymin: 0, ymax: ah };
+    medidas = ` · imagen ${Math.round(aw)}×${Math.round(ah)} ${u1}`;
+  } else cv1.style.height = "";
+  if (!$("verFig") || $("verFig").checked) {
+    o1.figuras = [];
+    mv.forEach(f => {
+      const pts = [];
+      for (let i = 0; i < nm; i++) if (f.length > 3 + 3 * i) pts.push([f[1 + 3 * i] * (ks[i] || 1), f[2 + 3 * i] * (ks[i] || 1)]);
+      if (pts.length > 1) o1.figuras.push(pts);
+    });
+  }
+  o1.titulo = `1) Marcadores sobre la imagen, ${cuenta} disparo(s)${medidas}${conEscala ? ` · ${kUnica.toFixed(3)} mm/px` : ""}`;
+  grafico(cv1, gP, o1);
+  grafico($("g2"), gX, { titulo: `2) Desplazamiento en X respecto a la media (${u}, 0 = media)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true, simetrico: true });
+  grafico($("g3"), gY, { titulo: `3) Desplazamiento en Y respecto a la media (${u}, 0 = media, + = arriba)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true, simetrico: true });
 }
+
+/* ---------- En directo: la cámara publica solo posiciones; el dashboard las recibe ---------- */
+let directoId = null, hbTimer = null, pubTimer = null, pubEnCurso = false, pubPendiente = false;
+function nuevoId() {
+  try { return crypto.randomUUID(); } catch (e) {}
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
+}
+const FASES = { calibrando: "Calibrando los marcadores", lista: "Cámara lista", sesion: "Sesión en curso",
+                terminada: "Sesión terminada (sin guardar)", guardada: "Sesión guardada", apagada: "Cámara apagada" };
+function faseActual() {
+  if (!corriendo) return "apagada";
+  if (grabando) return "sesion";
+  if (guardada) return "guardada";
+  if (porGuardar) return "terminada";
+  return calibrando ? "calibrando" : "lista";
+}
+function avisoDirecto(t, mal) { const el = $("liveCam"); el.textContent = t; el.style.color = mal ? "#b91c1c" : "#555"; }
+function iniciarDirecto() {
+  if (modo !== "cam" || directoId) return;
+  directoId = nuevoId();
+  // limpia filas propias antiguas (por ejemplo, de una cámara que se cerró de golpe)
+  sb.from("en_directo").delete().lt("updated_at", new Date(Date.now() - 3600e3).toISOString()).then(() => {}, () => {});
+  publicar(true);
+  hbTimer = setInterval(() => publicar(true), 10000);       // latido: el dashboard sabe que la cámara sigue activa
+}
+function pararDirecto() {
+  clearInterval(hbTimer); hbTimer = null; clearTimeout(pubTimer); pubTimer = null;
+  const id = directoId; directoId = null;
+  avisoDirecto("");
+  return id ? sb.from("en_directo").delete().eq("id", id).then(() => {}, () => {}) : null;
+}
+function publicar(ya) {
+  if (modo !== "cam" || !directoId) return;
+  if (ya) { clearTimeout(pubTimer); pubTimer = null; enviarDirecto(); return; }
+  if (pubTimer) return;
+  pubTimer = setTimeout(() => { pubTimer = null; enviarDirecto(); }, 250);
+}
+async function enviarDirecto() {
+  if (!directoId) return;
+  if (pubEnCurso) { pubPendiente = true; return; }
+  pubEnCurso = true;
+  const estadoVivo = {
+    v: 1, sesion: contadorSesion, fase: faseActual(), grabando,
+    etiqueta: $("etiqueta").value.trim(), n_marcadores: Math.max(1, parseInt($("nmarc").value) || 3),
+    diametro_mm: parseFloat($("diam").value) || null,
+    ancho: video.videoWidth || 0, alto: video.videoHeight || 0,
+    umbral_db: Math.round(pctADb(umbralPct())), eliminados,
+    ids, picos, ultimaDiam, muestras          // solo números: ningún vídeo ni audio
+  };
+  try {
+    const { error } = await sb.from("en_directo").upsert({ id: directoId, estado: estadoVivo, updated_at: new Date().toISOString() });
+    avisoDirecto(error ? "Dashboard: no se pudo publicar (" + error.message + ")" : "Dashboard: publicando en directo ✓", !!error);
+  } catch (e) { avisoDirecto("Dashboard: sin conexión", true); }
+  pubEnCurso = false;
+  if (pubPendiente) { pubPendiente = false; enviarDirecto(); }
+}
+
+/* Dashboard (solo lectura) */
+let remoto = null, liveId = null, canalDir = null, pollTimer = null, relojTimer = null;
+let ultimaSenal = 0, rtOk = false, sigSesiones = "", sigEstado = "", sesionRemota = null;
+function iniciarDashboard() {
+  detenerDashboard();
+  muestras = []; disparos = []; ids = []; picos = []; vis = []; ultimaDiam = [];
+  remoto = null; liveId = null; sigSesiones = ""; sigEstado = ""; sesionRemota = null;
+  $("dSesiones").innerHTML = ""; $("dEstado").textContent = "Buscando cámaras conectadas…"; $("dInfo").textContent = "";
+  pintarLista(); dibujarGraficos();
+  $("dSesiones").onchange = () => {
+    liveId = $("dSesiones").value; remoto = null; sigEstado = "";
+    muestras = []; disparos = []; ids = []; picos = []; vis = []; ultimaDiam = []; sesionRemota = null;
+    pintarLista(); dibujarGraficos(); cargarFila();
+  };
+  try {
+    canalDir = sb.channel("directo-" + nuevoId().slice(0, 8))
+      .on("postgres_changes", { event: "*", schema: "public", table: "en_directo" }, p => {
+        if (p.eventType === "DELETE" || !p.new) { cargarLista(); return; }
+        if (liveId && p.new.id === liveId) aplicarFila(p.new); else cargarLista();
+      })
+      .subscribe(st => { rtOk = st === "SUBSCRIBED"; pintarConexion(); });
+  } catch (e) { rtOk = false; pintarConexion(); }
+  cargarLista();
+  pollTimer = setInterval(() => { cargarLista(); if (liveId && !rtOk) cargarFila(); }, 4000);   // red de seguridad si el tiempo real falla
+  relojTimer = setInterval(pintarEstadoDash, 1000);
+}
+function detenerDashboard() {
+  clearInterval(pollTimer); clearInterval(relojTimer); pollTimer = relojTimer = null;
+  if (canalDir) { try { sb.removeChannel(canalDir); } catch (e) {} canalDir = null; }
+  rtOk = false;
+}
+function pintarConexion() { $("dConn").textContent = rtOk ? "● tiempo real" : "○ actualizando cada pocos segundos"; }
+async function cargarLista() {
+  const { data, error } = await sb.from("en_directo").select("id,updated_at,etiqueta:estado->>etiqueta,fase:estado->>fase")
+    .order("updated_at", { ascending: false }).limit(20);
+  if (error) {
+    $("dEstado").textContent = /relation|does not exist|schema cache/i.test(error.message)
+      ? "Falta crear la tabla «en_directo» en Supabase (ejecuta supabase_directo.sql)." : "No se pudo leer: " + error.message;
+    return;
+  }
+  const vivas = data.filter(r => Date.now() - Date.parse(r.updated_at) < 10 * 60e3);
+  const sig = vivas.map(r => r.id + "|" + (r.etiqueta || "") + "|" + r.fase).join(";");
+  if (sig !== sigSesiones) {                      // solo se reconstruye el desplegable si ha cambiado algo
+    sigSesiones = sig;
+    const sel = $("dSesiones");
+    sel.innerHTML = vivas.map(r => `<option value="${r.id}">${(r.etiqueta || "sin código").replace(/</g, "&lt;")} · ${FASES[r.fase] || r.fase}</option>`).join("");
+    if (liveId && vivas.some(r => r.id === liveId)) sel.value = liveId;
+  }
+  if (!vivas.length) { if (!liveId) $("dEstado").textContent = "No hay ninguna cámara conectada. Abre la app en el dispositivo de la cámara y pulsa «Activar cámara»."; return; }
+  if (!liveId || (!remoto && !vivas.some(r => r.id === liveId))) {
+    liveId = vivas[0].id; $("dSesiones").value = liveId; cargarFila();
+  }
+}
+async function cargarFila() {
+  if (!liveId) return;
+  const { data, error } = await sb.from("en_directo").select("id,updated_at,estado").eq("id", liveId).maybeSingle();
+  if (error) return;
+  if (data) aplicarFila(data);
+  else if (remoto) { remoto = Object.assign({}, remoto, { fase: "apagada", cerrada: true }); pintarEstadoDash(); }
+}
+function aplicarFila(r) {
+  const e = r.estado || {};
+  ultimaSenal = Date.parse(r.updated_at) || Date.now();
+  const sig = JSON.stringify(e);
+  if (sig === sigEstado) { pintarEstadoDash(); return; }   // solo latido: nada que redibujar
+  sigEstado = sig;
+  const previo = (e.sesion === sesionRemota) ? new Map(ids.map((id, i) => [id, vis[i]])) : new Map();   // se conservan las casillas dentro de la misma sesión
+  sesionRemota = e.sesion;
+  remoto = e;
+  muestras = e.muestras || []; ids = e.ids || []; picos = e.picos || [];
+  disparos = muestras.map(f => f[0]);
+  vis = ids.map(id => previo.has(id) ? previo.get(id) : true);
+  $("nmarc").value = e.n_marcadores || 3;
+  $("diam").value = e.diametro_mm || "";
+  ultimaDiam = e.ultimaDiam || [];
+  pintarLista(); dibujarGraficos(); pintarEstadoDash();
+}
+function pintarEstadoDash() {
+  if (!remoto) return;
+  const seg = Math.max(0, Math.round((Date.now() - ultimaSenal) / 1000));
+  const sinSenal = remoto.cerrada || seg > 35;
+  $("dEstado").textContent = (remoto.cerrada ? "La cámara ha cerrado la sesión en directo. Se muestran los últimos datos recibidos." :
+    `${FASES[remoto.fase] || remoto.fase}${remoto.etiqueta ? " · " + remoto.etiqueta : ""} · ${muestras.length} disparo(s)`);
+  $("dEstado").style.color = sinSenal ? "#b91c1c" : "";
+  $("dInfo").textContent = remoto.cerrada ? "" : (sinSenal ? `Sin señal de la cámara desde hace ${seg} s (¿pantalla apagada o sin conexión?)` : `Última señal hace ${seg} s`) +
+    (remoto.umbral_db != null ? ` · umbral ${remoto.umbral_db} dB` : "");
+}
+
+/* ---------- Zoom de los gráficos: rueda, pellizco, arrastre y botones ---------- */
+function aDatos(cv, ex, ey) {                    // de coordenadas de pantalla a coordenadas de datos
+  const r = cv.getBoundingClientRect(), m = cv._m;
+  const fx = (ex - r.left - m.L) / (m.w - m.L - m.R), fy = (ey - r.top - m.T) / (m.h - m.T - m.B);
+  return { x: m.xmin + fx * (m.xmax - m.xmin), y: m.invertY ? m.ymin + fy * (m.ymax - m.ymin) : m.ymax - fy * (m.ymax - m.ymin) };
+}
+function zoomEn(cv, f, cx, cy) {                 // f < 1 acerca, f > 1 aleja; (cx, cy) es el punto que se queda fijo
+  const m = cv._m; if (!m) return;
+  const nv = { xmin: cx - (cx - m.xmin) * f, xmax: cx + (m.xmax - cx) * f, ymin: cy - (cy - m.ymin) * f, ymax: cy + (m.ymax - cy) * f };
+  const anchoBase = m.base.xmax - m.base.xmin, ancho = nv.xmax - nv.xmin;
+  if (ancho >= anchoBase * 0.999) cv._vista = null;          // vuelve a la vista completa
+  else if (ancho < anchoBase * 0.02) return;                 // zoom máximo: 50 aumentos
+  else cv._vista = nv;
+  dibujarGraficos();
+}
+function zoomCentro(cv, f) { const m = cv._m; if (m) zoomEn(cv, f, (m.xmin + m.xmax) / 2, (m.ymin + m.ymax) / 2); }
+function restablecerZoom(cv) { cv._vista = null; dibujarGraficos(); }
+function mover(cv, dxPx, dyPx) {
+  const m = cv._m; if (!m || !cv._vista) return;
+  const dx = -dxPx / (m.w - m.L - m.R) * (m.xmax - m.xmin);
+  const dy = (m.invertY ? -1 : 1) * dyPx / (m.h - m.T - m.B) * (m.ymax - m.ymin);
+  cv._vista = { xmin: m.xmin + dx, xmax: m.xmax + dx, ymin: m.ymin + dy, ymax: m.ymax + dy };
+  dibujarGraficos();
+}
+function activarZoom(cv) {
+  const punteros = new Map(); let dist0 = 0;
+  const distancia = () => { const [a, b] = [...punteros.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  cv.addEventListener("wheel", e => {
+    if (!cv._m) return;
+    e.preventDefault();
+    const p = aDatos(cv, e.clientX, e.clientY);
+    zoomEn(cv, e.deltaY < 0 ? 0.8 : 1.25, p.x, p.y);
+  }, { passive: false });
+  cv.addEventListener("dblclick", () => restablecerZoom(cv));
+  cv.addEventListener("pointerdown", e => {
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    punteros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (punteros.size === 2) dist0 = distancia();
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!punteros.has(e.pointerId)) return;
+    const prev = punteros.get(e.pointerId), ahora = { x: e.clientX, y: e.clientY };
+    punteros.set(e.pointerId, ahora);
+    if (punteros.size === 1) mover(cv, ahora.x - prev.x, ahora.y - prev.y);
+    else if (punteros.size === 2 && cv._m) {
+      const d = distancia();
+      if (dist0 > 0 && Math.abs(d - dist0) > 2) {
+        const [a, b] = [...punteros.values()];
+        const p = aDatos(cv, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        zoomEn(cv, dist0 / d, p.x, p.y);
+        dist0 = d;
+      }
+    }
+  });
+  const fin = e => { punteros.delete(e.pointerId); dist0 = 0; };
+  cv.addEventListener("pointerup", fin); cv.addEventListener("pointercancel", fin);
+}
+function iniciarZoom() {
+  ["g1", "g2", "g3"].forEach(id => {
+    const cv = $(id);
+    activarZoom(cv);
+    const barra = document.createElement("div"); barra.className = "zbar";
+    [["+", () => zoomCentro(cv, 0.7)], ["−", () => zoomCentro(cv, 1.4)], ["Restablecer zoom", () => restablecerZoom(cv)]].forEach(([t, f]) => {
+      const b = document.createElement("button"); b.className = "sec"; b.textContent = t; b.onclick = f; barra.appendChild(b);
+    });
+    cv.insertAdjacentElement("afterend", barra);
+  });
+}
+iniciarSelectorColor();
+fijarCalibrando(false);
+iniciarZoom();
+pintarLista();
+$("verFig").addEventListener("change", dibujarGraficos);
 window.addEventListener("resize", dibujarGraficos);
 $("diam").addEventListener("input", dibujarGraficos);
 $("nmarc").addEventListener("input", dibujarGraficos);
