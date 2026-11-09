@@ -129,6 +129,9 @@
     body.modo-dash #verFig{margin-right:6px}
     body.modo-dash #vistaApp>label{margin:0 0 4px !important}
   }
+  footer.pie{margin:28px 2px 0;padding-top:14px;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted);line-height:1.6;text-align:center}
+  footer.pie a{color:var(--primary);text-decoration:none;font-weight:500}
+  footer.pie a:hover{text-decoration:underline}
   @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -261,7 +264,17 @@
   <button class="sec" onclick="salir()" style="margin-top:12px">Cerrar sesión</button>
 </div>
 
+<footer class="pie" id="pie"></footer>
+
 <script>
+/* ---------- Pie de página: copyright y contacto (se editan en config.js) ---------- */
+const AUTOR = typeof APP_AUTOR !== "undefined" && APP_AUTOR ? APP_AUTOR : "Helena";
+const CONTACTO = typeof APP_CONTACTO !== "undefined" && APP_CONTACTO && !/^PON/i.test(APP_CONTACTO) ? APP_CONTACTO : "";
+(function pintarPie() {
+  const anio = new Date().getFullYear(), esc2 = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const contacto = !CONTACTO ? "" : /@/.test(CONTACTO) ? ` · <a href="mailto:${esc2(CONTACTO)}">${esc2(CONTACTO)}</a>` : ` · ${esc2(CONTACTO)}`;
+  document.getElementById("pie").innerHTML = `© ${anio} ${esc2(AUTOR)}. Todos los derechos reservados.<br>Captura de marcadores · Proyecto de investigación en tiro deportivo${contacto}`;
+})();
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = id => document.getElementById(id);
 const MIN_AREA = 8;             // área mínima (px a resolución de trabajo) para aceptar un marcador
@@ -1609,7 +1622,7 @@ async function construirPDF(S, imgs, ia, avisoIA) {
   if (S.n < 8) { y -= 4; texto("Atención: con menos de 8 disparos las estadísticas de tendencia y aleatoriedad son poco fiables.", { size: 8.5, font: I, color: ROSA }); }
 
   doc.getPages().forEach((p, i, arr) => {
-    p.drawText(`Captura de marcadores · no se almacena vídeo ni audio, solo posiciones · Página ${i + 1} de ${arr.length}`.replace(/·/g, "-"), { x: M, y: 20, size: 7.5, font: F, color: GRIS });
+    p.drawText(limpio(`© ${new Date().getFullYear()} ${AUTOR}` + (CONTACTO ? ` - ${CONTACTO}` : "") + ` - No se almacena vídeo ni audio, solo posiciones - Página ${i + 1} de ${arr.length}`), { x: M, y: 20, size: 7.5, font: F, color: GRIS });
   });
   return await doc.save();
 }
