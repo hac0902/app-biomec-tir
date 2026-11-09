@@ -6,4 +6,4 @@ x
 
 // Pie de página y PDF del informe: tu nombre (para el © ) y tu contacto (correo o web). Déjalo vacío ("") si no quieres mostrar contacto.
 const APP_AUTOR = "Helena";
-const APP_CONTACTO = "PON_AQUI_TU_CORREO";
+const APP_CONTACTO = "helenaarias10.9@gmail.com";
