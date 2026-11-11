@@ -216,7 +216,7 @@
     <div class="mtitulo"><span>Volumen del disparo (mueve el círculo rosa)</span><span id="nivelTxt">sin micrófono</span></div>
     <div class="barra">
       <div class="pista"><div id="nivel"></div></div>
-      <input id="umbral" type="range" min="0" max="100" step="0.5" value="60" aria-label="Umbral de volumen del disparo">
+      <input id="umbral" type="range" min="0" max="100" step="0.25" value="70" aria-label="Umbral de volumen del disparo">
     </div>
     <select id="micSel" class="oculto" aria-label="Micrófono"></select>
   </div>
@@ -231,8 +231,8 @@
   </div>
   <details class="ayuda solo-cam"><summary>Cómo se usa</summary><p>0) Elige el color de los marcadores (o pulsa «Tomar el color de la imagen» y toca uno): solo se buscarán círculos de ese color. Color y marcadores solo se pueden cambiar con la calibración abierta.
   1) Toca los marcadores en la imagen, uno por uno y en el orden que quieras numerarlos: cada uno se busca solo cerca del punto que tocas (círculo discontinuo) y su diámetro no puede superar 1/10 del ancho de la imagen. Si la persona se mueve, pulsa «Calibrar» y vuelve a tocarlos (con la calibración abierta también puedes cambiar el color).
-  2) Haz un disparo (o un ruido parecido) y mueve el círculo rosa hasta un nivel por debajo del pico del disparo y por encima del ruido ambiente: la barra se pone rosa al superarlo.
-  3) Inicia la sesión: por cada disparo detectado se guarda UNA sola foto de las posiciones, la del pico de sonido.
+  2) Haz un disparo (o un ruido parecido) y mueve el círculo rosa hasta un nivel por debajo de lo que sube la barra con tu disparo y por encima del ruido ambiente y de otros disparos más lejanos: la barra se pone rosa al superarlo. Si pone «saturado», aleja un poco el móvil del arma.
+  3) Inicia la sesión: por cada disparo detectado se guarda UNA sola foto de las posiciones, la del momento de mayor volumen.
   El vídeo y el audio no se graban ni se envían: solo se guardan posiciones de los marcadores.</p></details>
   <h2 class="titulo-graf">Gráficos en directo</h2>
   <p class="nota nota-zoom" style="margin:0">Zoom: rueda del ratón o pellizco · mover: arrastrar (con zoom) · doble clic o «Restablecer zoom» para volver.</p>
@@ -307,13 +307,13 @@ let audioCtx = null, analyser = null, bufAudio = null, micStream = null, picoPct
 const work = document.createElement("canvas"), wctx = work.getContext("2d", { willReadFrequently: true });
 const vista = $("vista"), ctx = vista.getContext("2d"), video = $("video");
 
-try { const u = localStorage.getItem("umbralVol"); if (u !== null) $("umbral").value = u; } catch (e) {}
+try { const u = localStorage.getItem("umbralVolRms"); if (u !== null) $("umbral").value = u; } catch (e) {}   // clave nueva: el nivel ahora es RMS y el umbral antiguo (de pico) no sirve
 function estado(t) { $("estado").textContent = t; }
 function numero(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : Math.max(0, v); }
 const umbralPct = () => parseFloat($("umbral").value);
 const pctADb = p => p / 100 * 70 - 70;            // la barra cubre de -70 dB a 0 dB (0 dB = máximo)
 $("umbral").addEventListener("input", () => {
-  try { localStorage.setItem("umbralVol", $("umbral").value); } catch (e) {}
+  try { localStorage.setItem("umbralVolRms", $("umbral").value); } catch (e) {}
   pintarMedidor(0);
 });
 
@@ -420,12 +420,15 @@ function detener() {
 }
 
 /* ---------- Volumen ---------- */
-function leerNivel() {                           // pico de la última ventana de audio, 0-100 (de -70 a 0 dB)
-  if (!analyser) return 0;
+let saturado = false;                            // el micrófono llegó al máximo (0 dB): ahí el pico ya no distingue un disparo fuerte de otro más fuerte
+function leerNivel() {                           // nivel RMS (energía) de la última ventana de audio, 0-100 (de -70 a 0 dB)
+  if (!analyser) return 0;                       // RMS y no pico: un disparo satura el pico a 0 dB aunque suene a distinta distancia, el RMS sigue distinguiéndolos
   analyser.getFloatTimeDomainData(bufAudio);
-  let pico = 0;
-  for (let i = 0; i < bufAudio.length; i++) { const a = Math.abs(bufAudio[i]); if (a > pico) pico = a; }
-  const db = pico > 0 ? 20 * Math.log10(pico) : -100;
+  let pico = 0, suma = 0;
+  for (let i = 0; i < bufAudio.length; i++) { const v = bufAudio[i], a = Math.abs(v); suma += v * v; if (a > pico) pico = a; }
+  saturado = pico >= 0.99;
+  const rms = Math.sqrt(suma / bufAudio.length);
+  const db = rms > 0 ? 20 * Math.log10(rms) : -100;
   return Math.min(100, Math.max(0, (db + 70) / 70 * 100));
 }
 function pintarMedidor(nivel) {
@@ -435,7 +438,7 @@ function pintarMedidor(nivel) {
   $("nivel").classList.toggle("sobre", picoPct >= u);
   $("umbral").style.background = "none";
   $("nivelTxt").textContent = analyser
-    ? `nivel ${Math.round(pctADb(picoPct))} dB · umbral ${Math.round(pctADb(u))} dB`
+    ? `nivel ${Math.round(pctADb(picoPct))} dB · umbral ${Math.round(pctADb(u))} dB${saturado ? " · saturado" : ""}`
     : "sin micrófono · umbral " + Math.round(pctADb(u)) + " dB";
 }
 
@@ -966,6 +969,23 @@ function dibujarGraficos(dest) {
     o1.limites = { xmin: 0, xmax: aw, ymin: 0, ymax: ah };
     medidas = ` · imagen ${Math.round(aw)}×${Math.round(ah)} ${u1}`;
   } else cv1.style.height = dest ? "420px" : "";
+  if (dest && dest.zoom && n) {                          // informe: el gráfico 1 se acerca a la zona que ocupan los marcadores (misma escala en X e Y)
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    gP.forEach(gr => gr.trazos[0].forEach(p => { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }));
+    if (isFinite(x0)) {
+      const minSpan = conEscala ? 20 : 20 / (kM || 1);
+      let ancho = Math.max(x1 - x0, minSpan), alto = Math.max(y1 - y0, minSpan);
+      ancho *= 1.2; alto *= 1.2;                                              // margen alrededor
+      const cw = cv1.clientWidth || 820, pw = cw - 54;
+      const ratio = Math.min(0.9, Math.max(0.45, alto / ancho));              // proporción del lienzo: ni demasiado alto ni demasiado plano
+      const ph = pw * ratio, hCv = Math.round(ph + 52);
+      cv1.style.height = hCv + "px";
+      const W = Math.max(ancho, alto * pw / ph), H = W * ph / pw;             // caja de zoom con la misma escala en X y en Y
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      cv1._vista = { xmin: cx - W / 2, xmax: cx + W / 2, ymin: cy - H / 2, ymax: cy + H / 2 };
+      delete o1.limites; medidas = "";
+    }
+  }
   if (!$("verFig") || $("verFig").checked) {
     o1.figuras = [];
     mv.forEach(f => {
@@ -974,10 +994,21 @@ function dibujarGraficos(dest) {
       if (pts.length > 1) o1.figuras.push(pts);
     });
   }
-  o1.titulo = `1) Marcadores sobre la imagen, ${cuenta} disparo(s)${medidas}${conEscala ? ` · ${kUnica.toFixed(3)} mm/px` : ""}`;
+  o1.titulo = `1) Marcadores sobre la imagen${dest && dest.zoom ? " (ampliado)" : ""}, ${cuenta} disparo(s)${medidas}${conEscala ? ` · ${kUnica.toFixed(3)} mm/px` : ""}`;
   grafico(cv1, gP, o1);
   grafico(dest ? dest.g2 : $("g2"), gX, { titulo: `2) Desplazamiento en X respecto a la media (${u}, 0 = media)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true, simetrico: true });
   grafico(dest ? dest.g3 : $("g3"), gY, { titulo: `3) Desplazamiento en Y respecto a la media (${u}, 0 = media, + = arriba)`, xl: "Tiempo desde el inicio de la sesión (s)", lineas: true, puntos: true, ceroY: true, simetrico: true });
+  if (dest && dest.marcadores) {                          // informe: un gráfico por marcador, todos con la MISMA escala para poder comparar su dispersión
+    const dd = gX.map((gx, i) => ({ dx: gx.trazos[0].map(p => p[1]), dy: gY[i].trazos[0].map(p => p[1]) }));
+    let R = 0; dd.forEach(d => d.dx.concat(d.dy).forEach(v => { R = Math.max(R, Math.abs(v)); }));
+    R = Math.max(R * 1.2, kUnica ? 2 : 3);
+    dest.marcadores.forEach((cvm, i) => {
+      if (!dd[i]) return;
+      cvm._vista = { xmin: -R, xmax: R, ymin: -R, ymax: R };
+      const gr = { color: COLORES[i], nombre: nombreMarc(i), etiquetas: gP[i].etiquetas, trazos: [dd[i].dx.map((x, j) => [x, dd[i].dy[j]])] };
+      grafico(cvm, [gr], { titulo: `Dibujo de ${nombreMarc(i)} (${u}, centro = media, + = arriba)`, xl: `Desplazamiento en X (${u})`, lineas: true, puntos: true, numeros: true, cero: true, ceroY: true });
+    });
+  }
 }
 
 /* ---------- En directo: la cámara publica solo posiciones; el dashboard las recibe ---------- */
@@ -1473,22 +1504,22 @@ async function pedirIA(S) {
 }
 
 /* ---------- Informe en PDF ---------- */
-function imagenesGraficos() {                      // los tres gráficos a tamaño de papel, sobre blanco y con colores de impresión
+function imagenesGraficos() {                      // los gráficos a tamaño de papel, sobre blanco y con colores de impresión
   const caja = document.createElement("div");
   caja.style.cssText = "position:fixed;left:-9999px;top:0;width:820px";
-  const mk = alto => { const c = document.createElement("canvas"); c.style.cssText = `display:block;width:820px;height:${alto}px;box-shadow:none;border-radius:0`; caja.appendChild(c); return c; };
-  const dest = { g1: mk(420), g2: mk(300), g3: mk(300) };
+  const mk = (ancho, alto) => { const c = document.createElement("canvas"); c.style.cssText = `display:block;width:${ancho}px;height:${alto}px;box-shadow:none;border-radius:0`; caja.appendChild(c); return c; };
+  const nm = nMarcActual();
+  const dest = { zoom: true, g1: mk(820, 420), g2: mk(820, 300), g3: mk(820, 300), marcadores: Array.from({ length: nm }, () => mk(442, 440)) };   // 442x440: mismos px por mm en X e Y
   document.body.appendChild(caja);
-  const salida = [];
+  const aPng = cv => {
+    const c2 = document.createElement("canvas"); c2.width = cv.width; c2.height = cv.height;
+    const x = c2.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c2.width, c2.height); x.drawImage(cv, 0, 0);
+    return { png: c2.toDataURL("image/png"), w: c2.width, h: c2.height };
+  };
   try {
     temaClaro = true; dibujarGraficos(dest);
-    ["g1", "g2", "g3"].forEach(id => {
-      const cv = dest[id], c2 = document.createElement("canvas"); c2.width = cv.width; c2.height = cv.height;
-      const x = c2.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c2.width, c2.height); x.drawImage(cv, 0, 0);
-      salida.push({ png: c2.toDataURL("image/png"), w: c2.width, h: c2.height });
-    });
+    return { g: [dest.g1, dest.g2, dest.g3].map(aPng), m: dest.marcadores.map(aPng) };
   } finally { temaClaro = false; caja.remove(); }
-  return salida;
 }
 async function construirPDF(S, imgs, ia, avisoIA) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
@@ -1589,8 +1620,26 @@ async function construirPDF(S, imgs, ia, avisoIA) {
     page.drawRectangle({ x: M + (AN - w) / 2, y: y - h, width: w, height: h, borderColor: LINEA, borderWidth: .6 });
     y -= h + 8;
   };
-  for (let i = 0; i < imgs.length; i++) await imagen(imgs[i], i === 0 ? 300 : 200);
-  texto("Gráfico 1: posición de cada marcador en la imagen de la cámara, con los disparos unidos en orden. Gráficos 2 y 3: desplazamiento en X y en Y respecto a la media de la sesión (0 = media; en Y, positivo = arriba).", { size: 8, color: GRIS });
+  await imagen(imgs.g[0], 320);
+  texto("Gráfico 1: posición de cada marcador en la imagen de la cámara, ampliado a la zona que ocupan los marcadores (todos incluidos), con los disparos unidos en orden. Los dos ejes tienen la misma escala.", { size: 8, color: GRIS });
+  if (imgs.m.length) {
+    titulo("Dibujo de cada marcador");
+    const ancho = (AN - 10) / 2;                                              // dos por fila; todos con la misma escala para comparar su dispersión
+    for (let i = 0; i < imgs.m.length; i += 2) {
+      const par = imgs.m.slice(i, i + 2), h = ancho * par[0].h / par[0].w;
+      hueco(h + 6);
+      for (let j = 0; j < par.length; j++) {
+        const png = await doc.embedPng(par[j].png), x = M + j * (ancho + 10);
+        page.drawImage(png, { x, y: y - h, width: ancho, height: h });
+        page.drawRectangle({ x, y: y - h, width: ancho, height: h, borderColor: LINEA, borderWidth: .6 });
+      }
+      y -= h + 8;
+    }
+    texto("Cada gráfico muestra cómo se mueve un marcador alrededor de su posición media (cruz central). Todos usan la misma escala, así que el tamaño de la nube de puntos se puede comparar entre marcadores. Los números indican el orden de los disparos.", { size: 8, color: GRIS });
+  }
+  hueco(230); titulo("Evolución en el tiempo");
+  await imagen(imgs.g[1], 200); await imagen(imgs.g[2], 200);
+  texto("Gráficos 2 y 3: desplazamiento en X y en Y respecto a la media de la sesión (0 = media; en Y, positivo = arriba).", { size: 8, color: GRIS });
 
   titulo("Estadísticas por marcador");
   const u = S.u, cols = [["Marcador", 78], ["n", 24], ["SD X", 38], ["SD Y", 38], ["Rango X", 42], ["Rango Y", 42], ["RMS", 38], ["Paso", 38], ["Tend. X", 42], ["Tend. Y", 42], ["AC1 X", 36], ["AC1 Y", 36]];
