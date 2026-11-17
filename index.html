@@ -45,23 +45,33 @@
   .fila{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .fila label{flex:1;min-width:130px;font-size:.85rem;color:var(--muted)}
   #estado{margin:12px 2px;font-size:.92rem;min-height:1.2em}
   .oculto{display:none}
+  #calRemota{position:fixed;inset:0;z-index:50;background:var(--bg,#f6f4fb);overflow:auto;padding:10px 16px 24px}
+  #calRemota.oculto{display:none}
+  #calRemota .rc-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+  #calRemota .rc-cab h2{margin:0;font-size:1.1rem}
+  #calRemota .rc-cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:14px;align-items:start}
+  @media (max-width:820px){#calRemota .rc-cols{grid-template-columns:1fr}}
+  #rcVista{width:100%;height:auto;display:block;border-radius:12px;background:#111;touch-action:manipulation;cursor:crosshair}
+  #rcVideo{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  #rcAviso{margin:8px 2px;font-size:.92rem;min-height:1.2em}
+
   .card,.colorbox,.medidor{margin:14px 0;padding:14px 16px;border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);border:1px solid var(--line)}
   .colorbox input[type=color]{width:64px;height:40px;padding:3px;border-radius:12px}
   .colorbox input[type=checkbox]{margin-right:8px}
-  #swatches{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  #swatches,#rcSwatches{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
   .sw{width:36px;height:36px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 1.5px var(--line);margin:0;padding:0}
   .sw.sel{box-shadow:0 0 0 3px var(--primary)}
   .mtitulo{display:flex;justify-content:space-between;gap:10px;font-size:.88rem;font-weight:500;margin-bottom:6px}
   .mtitulo span:last-child{color:var(--muted);font-weight:400}
   .barra{position:relative;height:34px}
   .pista{position:absolute;left:0;right:0;top:12px;height:10px;border-radius:5px;background:var(--soft);overflow:hidden}
-  #nivel{height:100%;width:0;background:linear-gradient(90deg,var(--primary),var(--primary2));transition:background .1s}
-  #nivel.sobre{background:var(--accent)}
-  #umbral{position:absolute;left:0;top:0;width:100%;height:34px;margin:0;padding:0;background:transparent;border:0;box-shadow:none;-webkit-appearance:none;appearance:none}
-  #umbral::-webkit-slider-runnable-track{background:transparent;height:34px}
-  #umbral::-moz-range-track{background:transparent;height:34px}
-  #umbral::-webkit-slider-thumb{-webkit-appearance:none;box-sizing:border-box;width:26px;height:26px;border-radius:50%;background:var(--accent);border:4px solid var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.3);margin-top:4px}
-  #umbral::-moz-range-thumb{box-sizing:border-box;width:26px;height:26px;border-radius:50%;background:var(--accent);border:4px solid var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.3)}
+  #nivel,#rcNivel{height:100%;width:0;background:linear-gradient(90deg,var(--primary),var(--primary2));transition:background .1s}
+  #nivel.sobre,#rcNivel.sobre{background:var(--accent)}
+  #umbral,#rcUmbral{position:absolute;left:0;top:0;width:100%;height:34px;margin:0;padding:0;background:transparent;border:0;box-shadow:none;-webkit-appearance:none;appearance:none}
+  #umbral::-webkit-slider-runnable-track,#rcUmbral::-webkit-slider-runnable-track{background:transparent;height:34px}
+  #umbral::-moz-range-track,#rcUmbral::-moz-range-track{background:transparent;height:34px}
+  #umbral::-webkit-slider-thumb,#rcUmbral::-webkit-slider-thumb{-webkit-appearance:none;box-sizing:border-box;width:26px;height:26px;border-radius:50%;background:var(--accent);border:4px solid var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.3);margin-top:4px}
+  #umbral::-moz-range-thumb,#rcUmbral::-moz-range-thumb{box-sizing:border-box;width:26px;height:26px;border-radius:50%;background:var(--accent);border:4px solid var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.3)}
   #micSel{font-size:.85rem}
   canvas.grafico{background:var(--surface);border:1px solid var(--line);height:240px;margin-top:10px;touch-action:pan-y}
   .zbar button{padding:4px 12px;font-size:.8rem;margin:6px 6px 0 0}
@@ -145,8 +155,43 @@
   <svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b3df5"/><stop offset="1" stop-color="#b86bff"/></linearGradient></defs>
     <rect width="48" height="48" rx="14" fill="url(#lg)"/><circle cx="24" cy="24" r="15" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2"/>
     <circle cx="24" cy="24" r="9" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2"/><circle cx="24" cy="24" r="3.6" fill="#ff4f9a"/><circle cx="31" cy="19" r="2" fill="#fff"/></svg>
-  <h1><span id="titulo">Captura de marcadores</span><small>Postura y estabilidad en tiro · v15</small></h1>
+  <h1><span id="titulo">Captura de marcadores</span><small>Postura y estabilidad en tiro · v16</small></h1>
 </header>
+
+
+<div id="calRemota" class="oculto" role="dialog" aria-label="Calibración de la cámara">
+  <div class="rc-cab"><h2>Calibración de la cámara</h2><button class="sec mini" onclick="cerrarCalRemota()">Cerrar</button></div>
+  <div id="rcAviso">Conectando con la cámara…</div>
+  <div class="rc-cols">
+    <div>
+      <canvas id="rcVista"></canvas>
+      <video id="rcVideo" playsinline muted autoplay></video>
+      <div class="medidor">
+        <div class="mtitulo"><span>Volumen del disparo (mueve el círculo rosa)</span><span id="rcNivelTxt">sin micrófono</span></div>
+        <div class="barra"><div class="pista"><div id="rcNivel"></div></div>
+          <input id="rcUmbral" type="range" min="0" max="100" step="0.25" value="70" aria-label="Umbral de volumen del disparo"></div>
+      </div>
+    </div>
+    <div>
+      <div class="fila">
+        <label>Nº de marcadores<input id="rcN" type="number" min="1" max="6" value="3"></label>
+        <label>Diámetro real marcador (mm)<input id="rcDiam" type="number" step="0.1" value="20"></label>
+      </div>
+      <div class="colorbox">
+        <div class="mtitulo"><span>Color de los marcadores</span><span id="rcColorTxt">sin elegir</span></div>
+        <div id="rcSwatches"></div>
+        <div class="fila">
+          <label>Otro color<input id="rcColorPick" type="color" value="#ff0000"></label>
+          <label>Tolerancia de tono<input id="rcTol" type="range" min="5" max="45" value="20"></label>
+        </div>
+        <button id="rcMuestra" class="sec" onclick="enviarCal({t:'cmd',k:'muestra'})">Tomar el color de la imagen</button>
+        <label style="font-size:.85rem;display:block;margin-top:8px"><input type="checkbox" id="rcMask">Ver máscara de color (blanco = color elegido)</label>
+      </div>
+      <button id="rcCalibrar" class="sec" onclick="enviarCal({t:'cmd',k:'calibrar'})">Calibrar (volver a elegir marcadores)</button>
+      <p class="nota">Toca los marcadores en la imagen: se eligen en la cámara. El vídeo va directo de la cámara a esta pantalla; no pasa por ningún servidor ni se guarda.</p>
+    </div>
+  </div>
+</div>
 
 <div id="vistaLogin" class="card">
   <input id="email" type="email" placeholder="Email" autocomplete="username">
@@ -194,6 +239,7 @@
     <select id="dSesiones"></select>
     <div id="dEstado" style="font-size:.92rem;margin-top:8px">Buscando cámaras conectadas…</div>
     <div id="dInfo" class="nota"></div>
+    <button id="bCalRemota" class="sec mini" onclick="abrirCalRemota()" disabled style="margin-top:6px">Calibrar la cámara</button>
   </div>
   <div class="fila solo-cam">
     <label>Nº de marcadores<input id="nmarc" type="number" min="1" max="6" value="3"></label>
@@ -297,6 +343,7 @@ let historialFicha = new Map(); // nombre (en minúsculas) -> datos de la últim
 const PLANOS = { sagital: "Sagital (hombro-cadera-rodilla)", frontal_cara: "Frontal de cara", frontal_espalda: "Frontal de espaldas" };
 let contadorSesion = 0;         // número de sesión (para que el dashboard sepa cuándo empieza una nueva)
 let calibrando = false, ultimaDiam = [];     // calibrando: se pueden tocar marcadores y cambiar el color
+let ultDet = [];
 let colorMarc = null, modoMuestreo = false;   // color de los marcadores: {h, tolH, sMin, vMin}
 const RAD_FRAC = 0.1;          // radio de búsqueda alrededor del punto elegido: 1/10 del ancho de la imagen
 const DIAM_MAX_FRAC = 0.1;     // diámetro máximo de un marcador: 1/10 del ancho de la imagen
@@ -558,9 +605,12 @@ function colorMedio(img, sx, sy) {               // color medio de 3x3
 function tocar(e) {
   if (!corriendo) return;
   if (!calibrando) { estado("Pulsa «Calibrar» para volver a elegir los marcadores o cambiar el color."); return; }
-  N = Math.max(1, parseInt($("nmarc").value) || 3);
   const r = vista.getBoundingClientRect();
-  const tx = Math.round((e.clientX - r.left) * W / r.width), ty = Math.round((e.clientY - r.top) * H / r.height);
+  tocarXY(Math.round((e.clientX - r.left) * W / r.width), Math.round((e.clientY - r.top) * H / r.height));
+}
+function tocarXY(tx, ty) {
+  if (!corriendo || !calibrando) return;
+  N = Math.max(1, parseInt($("nmarc").value) || 3);
   const img = wctx.getImageData(0, 0, W, H).data;
   const vivo = (R_, G_, B_) => { const [, s, v] = rgb2hsv(R_, G_, B_); return s >= 0.35 && v >= 0.3; };
   let ok = (R_, G_, B_) => coincide(colorMarc, R_, G_, B_);
@@ -658,6 +708,7 @@ function bucle() {
   N = Math.max(1, parseInt($("nmarc").value) || 3);
   wctx.drawImage(video, 0, 0, W, H);
   const det = detectar();                                       // un elemento por marcador elegido (o null si no se ve)
+  ultDet = det;
   const found = (marcas.length === N && det.every(Boolean)) ? det : [];   // fotograma válido: se ven los N marcadores
   if (found.length === N) {                                     // diámetros actuales: dan la escala (mm/px) antes del primer disparo
     const primera = ultimaDiam.length === 0;
@@ -902,12 +953,15 @@ function grafico(cv, grupos, o) {
   grupos.forEach(gr => {
     g.strokeStyle = gr.color; g.fillStyle = gr.color; g.lineWidth = 1.5;
     gr.trazos.forEach(tr => {
+      const nT = tr.length, aj = j => (o.gradiente && nT > 1) ? 0.15 + 0.85 * j / (nT - 1) : 1;   // gradiente: los disparos antiguos, más claros; los nuevos, más fuertes
       if (o.lineas) {
-        if (o.figuras && o.figuras.length) g.globalAlpha = 0.45;
-        g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke();
+        const tope = (o.figuras && o.figuras.length) ? 0.45 : 1;
+        if (o.gradiente && nT > 1) {
+          for (let j = 1; j < nT; j++) { g.globalAlpha = tope * aj(j); g.beginPath(); g.moveTo(px(tr[j - 1][0]), py(tr[j - 1][1])); g.lineTo(px(tr[j][0]), py(tr[j][1])); g.stroke(); }
+        } else { g.globalAlpha = tope; g.beginPath(); tr.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); g.stroke(); }
         g.globalAlpha = 1;
       }
-      if (o.puntos) tr.forEach(p => { g.beginPath(); g.arc(px(p[0]), py(p[1]), 3, 0, 6.2832); g.fill(); });
+      if (o.puntos) tr.forEach((p, j) => { g.globalAlpha = aj(j); g.beginPath(); g.arc(px(p[0]), py(p[1]), 3, 0, 6.2832); g.fill(); g.globalAlpha = 1; });
       if (o.numeros && tr.length <= 30) {               // número de orden de cada disparo
         g.font = "9px Outfit, system-ui, sans-serif"; g.fillStyle = TM.ink;
         tr.forEach((p, j) => g.fillText(String(gr.etiquetas ? gr.etiquetas[j] : j + 1), px(p[0]) + 4, py(p[1]) - 4));
@@ -916,6 +970,14 @@ function grafico(cv, grupos, o) {
     });
   });
   g.restore();
+  if (o.gradiente && grupos.length && todos.length > 1) {   // leyenda del gradiente (dentro del gráfico, abajo a la izquierda)
+    const gw = 54, gx = L + 6 + 34 + 4, gy = h - B - 16, gg = g.createLinearGradient(gx, 0, gx + gw, 0);
+    gg.addColorStop(0, "rgba(128,128,128,.15)"); gg.addColorStop(1, grupos[0].color);
+    g.font = "10px Outfit, system-ui, sans-serif"; g.fillStyle = TM.muted; g.fillText("antiguo", L + 6, gy + 8);
+    g.fillStyle = gg; g.fillRect(gx, gy, gw, 8);
+    g.fillStyle = TM.muted; g.fillText("reciente", gx + gw + 4, gy + 8);
+    g.font = "11px Outfit, system-ui, sans-serif";
+  }
   grupos.forEach((gr, i) => {                            // leyenda
     const x = posLey[i].x;
     g.fillStyle = gr.color; g.fillRect(x, 6, 8, 8);
@@ -961,7 +1023,7 @@ function dibujarGraficos(dest) {
   const conEscala = mm && ks.length > 0 && ks.every(Boolean);
   const kM = conEscala ? kUnica : 1, u1 = conEscala ? "mm" : "px";
   const cv1 = dest ? dest.g1 : $("g1");
-  const o1 = { xl: `X (${u1})`, lineas: true, puntos: true, numeros: true, invertY: true };
+  const o1 = { xl: `X (${u1})`, lineas: true, puntos: true, numeros: true, invertY: true, gradiente: true };
   let medidas = "";
   if (anchoPx && altoPx) {
     const aw = anchoPx * kM, ah = altoPx * kM;
@@ -1006,7 +1068,7 @@ function dibujarGraficos(dest) {
       if (!dd[i]) return;
       cvm._vista = { xmin: -R, xmax: R, ymin: -R, ymax: R };
       const gr = { color: COLORES[i], nombre: nombreMarc(i), etiquetas: gP[i].etiquetas, trazos: [dd[i].dx.map((x, j) => [x, dd[i].dy[j]])] };
-      grafico(cvm, [gr], { titulo: `Dibujo de ${nombreMarc(i)} (${u}, centro = media, + = arriba)`, xl: `Desplazamiento en X (${u})`, lineas: true, puntos: true, numeros: true, cero: true, ceroY: true });
+      grafico(cvm, [gr], { titulo: `Dibujo de ${nombreMarc(i)} (${u}, centro = media, + = arriba)`, xl: `Desplazamiento en X (${u})`, lineas: true, puntos: true, numeros: true, cero: true, ceroY: true, gradiente: true });
     });
   }
 }
@@ -1033,6 +1095,7 @@ function iniciarDirecto() {
   // limpia filas propias antiguas (por ejemplo, de una cámara que se cerró de golpe)
   sb.from("en_directo").delete().lt("updated_at", new Date(Date.now() - 3600e3).toISOString()).then(() => {}, () => {});
   publicar(true);
+  camIniciarCal();
   hbTimer = setInterval(() => publicar(true), 10000);       // latido: el dashboard sabe que la cámara sigue activa
   peticionTimer = setInterval(revisarPeticiones, 2500);     // el dashboard puede pedir que se eliminen disparos
 }
@@ -1053,6 +1116,7 @@ async function revisarPeticiones() {
   } catch (e) {}
 }
 function pararDirecto() {
+  camCerrarCal();
   clearInterval(peticionTimer); peticionTimer = null;
   clearInterval(hbTimer); hbTimer = null; clearTimeout(pubTimer); pubTimer = null;
   const id = directoId; directoId = null;
@@ -1114,6 +1178,7 @@ function iniciarDashboard() {
   relojTimer = setInterval(pintarEstadoDash, 1000);
 }
 function detenerDashboard() {
+  if (!$("calRemota").classList.contains("oculto")) cerrarCalRemota();
   clearInterval(pollTimer); clearInterval(relojTimer); pollTimer = relojTimer = null;
   if (canalDir) { try { sb.removeChannel(canalDir); } catch (e) {} canalDir = null; }
   rtOk = false;
@@ -1178,9 +1243,163 @@ function pintarEstadoDash() {
   $("dEstado").textContent = (remoto.cerrada ? "La cámara ha cerrado la sesión en directo. Se muestran los últimos datos recibidos." :
     `${FASES[remoto.fase] || remoto.fase}${remoto.etiqueta ? " · " + remoto.etiqueta : ""} · ${muestras.length} disparo(s)`);
   $("dEstado").style.color = sinSenal ? "var(--bad)" : "";
+  $("bCalRemota").disabled = remoto.cerrada || sinSenal || remoto.fase === "apagada";
   const fichaTxt = [remoto.modalidad, remoto.distancia_m ? remoto.distancia_m + " m" : "", remoto.mano, PLANOS[remoto.plano]].filter(Boolean).join(" · ");
   $("dInfo").textContent = (fichaTxt ? fichaTxt + " — " : "") + (remoto.cerrada ? "" : (sinSenal ? `Sin señal de la cámara desde hace ${seg} s (¿pantalla apagada o sin conexión?)` : `Última señal hace ${seg} s`) +
     (remoto.umbral_db != null ? ` · umbral ${remoto.umbral_db} dB` : ""));
+}
+
+
+/* ---------- Calibración remota: el dashboard ve la cámara y maneja los mismos controles ----------
+   El vídeo viaja directo de la cámara al dashboard (WebRTC, cifrado); Supabase solo reenvía mensajes
+   de conexión y órdenes (canal «broadcast», no se guarda nada). */
+const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+let canalCal = null, pcCam = null, estadoCalTimer = null, ultimoVivo = 0;
+function enviarCal(p) { if (canalCal) { try { canalCal.send({ type: "broadcast", event: "m", payload: p }); } catch (e) {} } }
+function abrirCanalCal(id, alRecibir) {
+  cerrarCanalCal();
+  canalCal = sb.channel("cal-" + id, { config: { broadcast: { self: false } } });
+  canalCal.on("broadcast", { event: "m" }, m => { try { alRecibir(m.payload || {}); } catch (e) {} }).subscribe();
+}
+function cerrarCanalCal() { if (canalCal) { try { sb.removeChannel(canalCal); } catch (e) {} canalCal = null; } }
+
+/* lado cámara */
+function camIniciarCal() { if (directoId) abrirCanalCal(directoId, camAlRecibir); }
+function camCerrarCal() { camCortar(); cerrarCanalCal(); }
+function camCortar() {
+  clearInterval(estadoCalTimer); estadoCalTimer = null;
+  if (pcCam) { try { pcCam.close(); } catch (e) {} pcCam = null; }
+}
+async function camAlRecibir(m) {
+  if (!corriendo) return;
+  if (m.t === "hola") {
+    camCortar();
+    pcCam = new RTCPeerConnection(ICE);
+    const pc = pcCam;
+    (stream ? stream.getVideoTracks() : []).forEach(t => pc.addTrack(t, stream));       // solo vídeo: el audio nunca sale de la cámara
+    pc.onicecandidate = e => { if (e.candidate) enviarCal({ t: "ice", de: "cam", c: e.candidate.toJSON() }); };
+    const off = await pc.createOffer(); await pc.setLocalDescription(off);
+    enviarCal({ t: "offer", sdp: { type: off.type, sdp: off.sdp } });
+    ultimoVivo = Date.now();
+    clearInterval(estadoCalTimer); estadoCalTimer = setInterval(camEnviarEstado, 300);
+  } else if (m.t === "answer" && pcCam) { await pcCam.setRemoteDescription(m.sdp); }
+  else if (m.t === "ice" && pcCam && m.c) { try { await pcCam.addIceCandidate(m.c); } catch (e) {} }
+  else if (m.t === "vivo") ultimoVivo = Date.now();
+  else if (m.t === "adios") camCortar();
+  else if (m.t === "cmd") camOrden(m);
+}
+function camEnviarEstado() {
+  if (Date.now() - ultimoVivo > 20000) { camCortar(); return; }       // el dashboard ya no está mirando
+  enviarCal({ t: "estado", W, H, marcas, det: ultDet.map(f => f ? { x: f.x, y: f.y, d: f.d } : null), colorMarc, calibrando, muestreo: modoMuestreo,
+    nivel: picoPct, sat: saturado, mic: !!analyser, umbral: umbralPct(), n: Math.max(1, parseInt($("nmarc").value) || 3), diam: $("diam").value,
+    tol: tolActual(), msg: $("estado").textContent });
+}
+function camOrden(m) {
+  const k = m.k;
+  if (k === "tap") tocarXY(Math.round(m.u * W), Math.round(m.v * H));
+  else if (k === "calibrar") calibrar();
+  else if (k === "umbral") { $("umbral").value = m.v; $("umbral").dispatchEvent(new Event("input")); }
+  else if (k === "nmarc") { $("nmarc").value = m.v; $("nmarc").dispatchEvent(new Event("change")); }
+  else if (k === "diam") { $("diam").value = m.v; publicar(); }
+  else if (!calibrando) return;                                       // color y tolerancia solo se cambian calibrando, igual que en la cámara
+  else if (k === "color") { $("swatches").querySelectorAll(".sw").forEach(x => x.classList.remove("sel")); fijarColor(m.h, m.s, m.v, m.nombre || "personalizado"); }
+  else if (k === "tol") { $("tolH").value = m.v; if (colorMarc) colorMarc.tolH = tolActual(); }
+  else if (k === "muestra") muestrear();
+  else if (k === "mask") $("verMask").checked = !!m.v;
+}
+
+/* lado dashboard */
+let pcDash = null, rcEst = null, rcLatido = null, rcDibujo = null, rcHola = null, rcTieneVideo = false, rcSwOk = false;
+const rcVideo = $("rcVideo"), rcVista = $("rcVista"), rcCtx = rcVista.getContext("2d", { willReadFrequently: true });
+function rcAviso(t, mal) { $("rcAviso").textContent = t; $("rcAviso").style.color = mal ? "var(--bad)" : ""; }
+function abrirCalRemota() {
+  if (!liveId || !remoto || remoto.cerrada) return;
+  $("calRemota").classList.remove("oculto"); document.body.style.overflow = "hidden";
+  if (!rcSwOk) iniciarControlesRemotos();
+  rcEst = null; rcTieneVideo = false; rcAviso("Conectando con la cámara…");
+  abrirCanalCal(liveId, dashAlRecibir);
+  const pedir = () => { if (!rcTieneVideo) { enviarCal({ t: "hola" }); } };
+  clearInterval(rcHola); setTimeout(pedir, 800); rcHola = setInterval(() => { if (rcTieneVideo) clearInterval(rcHola); else pedir(); }, 4000);
+  clearInterval(rcLatido); rcLatido = setInterval(() => enviarCal({ t: "vivo" }), 5000);
+  setTimeout(() => { if (!rcTieneVideo && !$("calRemota").classList.contains("oculto"))
+    rcAviso("No llega el vídeo. Comprueba que la cámara está activa y con la pantalla encendida; algunas redes (datos móviles, wifi de empresa) impiden la conexión directa: prueba con ambos dispositivos en la misma wifi.", true); }, 15000);
+  cancelAnimationFrame(rcDibujo); rcDibujo = requestAnimationFrame(rcPintar);
+}
+function cerrarCalRemota() {
+  enviarCal({ t: "adios" });
+  clearInterval(rcLatido); clearInterval(rcHola); cancelAnimationFrame(rcDibujo);
+  if (pcDash) { try { pcDash.close(); } catch (e) {} pcDash = null; }
+  rcVideo.srcObject = null; cerrarCanalCal();
+  $("calRemota").classList.add("oculto"); document.body.style.overflow = "";
+}
+async function dashAlRecibir(m) {
+  if (m.t === "offer") {
+    if (pcDash) { try { pcDash.close(); } catch (e) {} }
+    pcDash = new RTCPeerConnection(ICE); const pc = pcDash;
+    pc.ontrack = e => { rcVideo.srcObject = e.streams[0] || new MediaStream([e.track]); rcVideo.play().catch(() => {}); };
+    pc.onicecandidate = e => { if (e.candidate) enviarCal({ t: "ice", de: "dash", c: e.candidate.toJSON() }); };
+    pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") rcAviso("No se pudo establecer la conexión directa con la cámara (la red lo impide). Prueba con ambos dispositivos en la misma wifi.", true); };
+    await pc.setRemoteDescription(m.sdp);
+    const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+    enviarCal({ t: "answer", sdp: { type: ans.type, sdp: ans.sdp } });
+  } else if (m.t === "ice" && pcDash && m.c) { try { await pcDash.addIceCandidate(m.c); } catch (e) {} }
+  else if (m.t === "estado") { rcEst = m; rcActualizarControles(m); }
+}
+function rcPintar() {
+  if (!$("calRemota").classList.contains("oculto")) rcDibujo = requestAnimationFrame(rcPintar); else return;
+  const e = rcEst; if (!e || !rcVideo.videoWidth) return;
+  if (!rcTieneVideo) { rcTieneVideo = true; rcAviso(""); }
+  if (rcVista.width !== e.W || rcVista.height !== e.H) { rcVista.width = e.W; rcVista.height = e.H; }
+  rcCtx.drawImage(rcVideo, 0, 0, e.W, e.H);
+  if (e.colorMarc && $("rcMask").checked) {
+    const im = rcCtx.getImageData(0, 0, e.W, e.H), d = im.data;
+    for (let p = 0; p < d.length; p += 4) { if (coincide(e.colorMarc, d[p], d[p + 1], d[p + 2])) d[p] = d[p + 1] = d[p + 2] = 255; else { d[p] *= .3; d[p + 1] *= .3; d[p + 2] *= .3; } }
+    rcCtx.putImageData(im, 0, 0);
+  }
+  rcCtx.font = "16px sans-serif";
+  const Rb = Math.round(e.W * RAD_FRAC);
+  (e.marcas || []).forEach((m, i) => {
+    const c = COLORES[i % COLORES.length], f = (e.det || [])[i];
+    rcCtx.strokeStyle = c; rcCtx.fillStyle = c; rcCtx.globalAlpha = .6; rcCtx.lineWidth = 1; rcCtx.setLineDash([4, 4]);
+    rcCtx.beginPath(); rcCtx.arc(m.x, m.y, Rb, 0, 2 * Math.PI); rcCtx.stroke();
+    rcCtx.setLineDash([]); rcCtx.globalAlpha = 1;
+    if (f) { rcCtx.lineWidth = 2; rcCtx.beginPath(); rcCtx.arc(f.x, f.y, f.d / 2 + 4, 0, 2 * Math.PI); rcCtx.stroke(); rcCtx.fillText(String(i + 1), f.x + f.d / 2 + 6, f.y); }
+    else rcCtx.fillText((i + 1) + "?", m.x + 4, m.y - 4);
+  });
+}
+function rcActualizarControles(e) {
+  const act = document.activeElement;
+  const poner = (el, v) => { if (el !== act && String(el.value) !== String(v)) el.value = v; };
+  poner($("rcUmbral"), e.umbral); poner($("rcN"), e.n); poner($("rcDiam"), e.diam); poner($("rcTol"), e.tol);
+  const pct = Math.max(0, Math.min(100, e.nivel || 0));
+  $("rcNivel").style.width = pct + "%"; $("rcNivel").classList.toggle("sobre", pct >= e.umbral);
+  $("rcNivelTxt").textContent = e.mic ? `nivel ${Math.round(pctADb(pct))} dB · umbral ${Math.round(pctADb(e.umbral))} dB${e.sat ? " · saturado" : ""}` : "la cámara no tiene micrófono · umbral " + Math.round(pctADb(e.umbral)) + " dB";
+  document.querySelectorAll("#rcSwatches button, #rcColorPick, #rcTol, #rcMuestra").forEach(el => { el.disabled = !e.calibrando; });
+  if (e.colorMarc) { const c = e.colorMarc; $("rcColorTxt").innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle;background:hsl(${Math.round(c.h)},85%,50%)"></span>elegido`; }
+  else $("rcColorTxt").textContent = "sin elegir";
+  if (!rcTieneVideo || e.msg !== $("rcAviso").dataset.m) { $("rcAviso").dataset.m = e.msg; if (rcTieneVideo) rcAviso(e.msg); }
+}
+function iniciarControlesRemotos() {
+  rcSwOk = true;
+  COLORES_BASE.forEach(([nombre, h]) => {
+    const b = document.createElement("button"); b.className = "sw"; b.title = nombre; b.style.background = `hsl(${h},85%,50%)`;
+    b.onclick = () => { $("rcSwatches").querySelectorAll(".sw").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); enviarCal({ t: "cmd", k: "color", h, s: .8, v: .7, nombre }); };
+    $("rcSwatches").appendChild(b);
+  });
+  $("rcColorPick").addEventListener("input", ev => {
+    const hex = ev.target.value, [h, s, v] = rgb2hsv(parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16));
+    $("rcSwatches").querySelectorAll(".sw").forEach(x => x.classList.remove("sel"));
+    enviarCal({ t: "cmd", k: "color", h, s, v, nombre: "personalizado" });
+  });
+  $("rcTol").addEventListener("input", () => enviarCal({ t: "cmd", k: "tol", v: +$("rcTol").value }));
+  $("rcMask").addEventListener("change", () => enviarCal({ t: "cmd", k: "mask", v: $("rcMask").checked }));
+  $("rcUmbral").addEventListener("input", () => enviarCal({ t: "cmd", k: "umbral", v: +$("rcUmbral").value }));
+  $("rcN").addEventListener("change", () => enviarCal({ t: "cmd", k: "nmarc", v: Math.max(1, Math.min(6, parseInt($("rcN").value) || 3)) }));
+  $("rcDiam").addEventListener("change", () => enviarCal({ t: "cmd", k: "diam", v: $("rcDiam").value }));
+  rcVista.addEventListener("click", ev => {
+    const r = rcVista.getBoundingClientRect();
+    enviarCal({ t: "cmd", k: "tap", u: (ev.clientX - r.left) / r.width, v: (ev.clientY - r.top) / r.height });
+  });
 }
 
 /* ---------- Ficha de la sesión (formulario previo a la cámara) ---------- */
